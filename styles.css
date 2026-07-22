@@ -65,10 +65,11 @@ h1 span { color: var(--violet); }
   border-radius: 16px;
   background: var(--violet-dark);
   color: white;
+  text-decoration: none;
   font-weight: 750;
   box-shadow: 0 12px 30px rgba(90, 62, 178, 0.24);
 }
-.download.disabled { cursor: not-allowed; opacity: 0.78; }
+.download:hover { background: var(--violet); }
 .release-note { color: var(--muted); font-size: 13px; }
 .trust-list { display: flex; gap: 12px; margin: 24px 0 0; padding: 0; list-style: none; }
 .trust-list li { padding: 7px 11px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.64); color: var(--muted); font-size: 12px; }
