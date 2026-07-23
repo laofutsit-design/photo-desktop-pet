@@ -27,6 +27,7 @@ const allActions = [...interactions, ...idleActions, ...specialActions];
 const bubbleEffects = [
   'bubble-pop', 'bubble-float', 'bubble-wobble', 'bubble-sparkle', 'bubble-meteor', 'bubble-aurora',
 ];
+const bubbleDirections = ['up', 'down', 'left', 'right'];
 const bubbleFontStacks = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif',
   yahei: '"Microsoft YaHei UI", "Microsoft YaHei", sans-serif',
@@ -740,6 +741,14 @@ function setPetEdge(state) {
     petPose.classList.remove(`edge-${name}`);
   }
   activeEdge = ['left', 'right', 'top', 'bottom'].includes(edge) ? edge : undefined;
+  const bubbleDirection = {
+    left: 'right',
+    right: 'left',
+    top: 'down',
+    bottom: 'up',
+  }[activeEdge] || 'up';
+  for (const direction of bubbleDirections) bubble.classList.remove(`bubble-direction-${direction}`);
+  bubble.classList.add(`bubble-direction-${bubbleDirection}`);
   if (!activeEdge) return;
   if (replay) void petPose.offsetWidth;
   petPose.classList.add(`edge-${activeEdge}`);
