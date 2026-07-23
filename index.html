@@ -53,10 +53,6 @@
               下载 Windows 版
             </a>
             <span class="release-note">Windows 10/11 x64 · v1.0.8 · 未签名版</span>
-            <a class="download-help-link" href="#download-help">
-              <i data-lucide="shield-alert" aria-hidden="true"></i>
-              下载被拦截？先看安全说明
-            </a>
           </div>
 
           <ul class="trust-list" aria-label="产品特点">
@@ -82,65 +78,6 @@
           </button>
 
           <span class="scroll-cue"><span>向下浏览</span><i data-lucide="arrow-down" aria-hidden="true"></i></span>
-        </div>
-      </section>
-
-      <section class="download-trust page-shell reveal" id="download-help" aria-labelledby="download-help-title">
-        <div class="download-trust-heading">
-          <p class="section-index">下载安全 · 先核验，再安装</p>
-          <h2 id="download-help-title">看到“通常不会下载”？</h2>
-          <p>这是浏览器对未签名新软件的信誉提醒，不代表文件已被判定为病毒。请不要关闭 SmartScreen 或杀毒软件。</p>
-        </div>
-
-        <div class="download-trust-content">
-          <div class="trust-warning" role="note">
-            <i data-lucide="alert-triangle" aria-hidden="true"></i>
-            <div>
-              <strong>当前为未签名测试版</strong>
-              <p>SmartScreen 尚未积累足够的发布者与文件信誉。校验值只能证明文件与本次 GitHub 发布一致，不能替代杀毒扫描。</p>
-            </div>
-          </div>
-
-          <ol class="trust-steps">
-            <li>
-              <span>01</span>
-              <div>
-                <h3>确认下载来源</h3>
-                <p>仅从本官网按钮或项目的 GitHub Release 下载。文件名出现“(1)”或“(2)”通常只是重复下载标记。</p>
-              </div>
-            </li>
-            <li>
-              <span>02</span>
-              <div>
-                <h3>核对 SHA-256</h3>
-                <p>在 PowerShell 运行 <code>Get-FileHash .\photo-desktop-pet-1.0.8-Windows-x64.exe -Algorithm SHA256</code>，结果应与下方完全一致。</p>
-                <div class="checksum-box">
-                  <code data-checksum>2D380FB9CCA2539D32DF0A75F71CDCD8A3B66FF66FCEEB1ED45914161388D1F7</code>
-                  <button type="button" data-copy-checksum aria-label="复制 SHA-256 校验值">
-                    <i data-lucide="copy" aria-hidden="true"></i>
-                    <span>复制</span>
-                  </button>
-                </div>
-                <p class="checksum-note">若校验值不一致，请立即删除文件，不要运行。</p>
-              </div>
-            </li>
-            <li>
-              <span>03</span>
-              <div>
-                <h3>确认无误后再保留</h3>
-                <p>在 Edge 下载面板中选择“…” →“保留”→“显示详细信息”→“仍然保留”。运行时若再次出现 SmartScreen，请先再次确认来源和校验值，再决定是否继续。</p>
-              </div>
-            </li>
-          </ol>
-
-          <div class="trust-actions">
-            <a href="https://github.com/laofutsit-design/photo-desktop-pet/releases/tag/v1.0.8" target="_blank" rel="noopener noreferrer">
-              查看 GitHub Release <i data-lucide="external-link" aria-hidden="true"></i>
-            </a>
-            <a href="https://learn.microsoft.com/en-us/deployedge/microsoft-edge-security-smartscreen" target="_blank" rel="noopener noreferrer">
-              了解 Microsoft SmartScreen <i data-lucide="external-link" aria-hidden="true"></i>
-            </a>
-          </div>
         </div>
       </section>
 
@@ -332,8 +269,74 @@
         <a href="#process">怎么玩</a>
         <a href="#gallery">角色画廊</a>
         <a href="privacy.html">安全隐私</a>
+        <a href="#download-help" data-open-download-help>下载安全说明</a>
         <a href="https://github.com/laofutsit-design" rel="noreferrer">GitHub</a>
       </nav>
     </footer>
+
+    <dialog class="download-help-dialog" id="download-help" aria-labelledby="download-help-title" data-download-help-dialog>
+      <div class="download-help-modal">
+        <header class="download-help-modal-header">
+          <div>
+            <p class="section-index">下载安全 · 先核验，再安装</p>
+            <h2 id="download-help-title">看到“通常不会下载”？</h2>
+          </div>
+          <button type="button" aria-label="关闭下载安全说明" data-close-download-help>
+            <i data-lucide="x" aria-hidden="true"></i>
+          </button>
+        </header>
+
+        <p class="download-help-intro">这是浏览器对未签名新软件的信誉提醒，不代表文件已被判定为病毒。请不要关闭 SmartScreen 或杀毒软件。</p>
+
+        <div class="trust-warning" role="note">
+          <i data-lucide="alert-triangle" aria-hidden="true"></i>
+          <div>
+            <strong>当前为未签名测试版</strong>
+            <p>SmartScreen 尚未积累足够的发布者与文件信誉。校验值只能证明文件与本次 GitHub 发布一致，不能替代杀毒扫描。</p>
+          </div>
+        </div>
+
+        <ol class="trust-steps">
+          <li>
+            <span>01</span>
+            <div>
+              <h3>确认下载来源</h3>
+              <p>仅从本官网按钮或项目的 GitHub Release 下载。文件名出现“(1)”或“(2)”通常只是重复下载标记。</p>
+            </div>
+          </li>
+          <li>
+            <span>02</span>
+            <div>
+              <h3>核对 SHA-256</h3>
+              <p>在 PowerShell 运行 <code>Get-FileHash .\photo-desktop-pet-1.0.8-Windows-x64.exe -Algorithm SHA256</code>，结果应与下方完全一致。</p>
+              <div class="checksum-box">
+                <code data-checksum>2D380FB9CCA2539D32DF0A75F71CDCD8A3B66FF66FCEEB1ED45914161388D1F7</code>
+                <button type="button" data-copy-checksum aria-label="复制 SHA-256 校验值">
+                  <i data-lucide="copy" aria-hidden="true"></i>
+                  <span>复制</span>
+                </button>
+              </div>
+              <p class="checksum-note">若校验值不一致，请立即删除文件，不要运行。</p>
+            </div>
+          </li>
+          <li>
+            <span>03</span>
+            <div>
+              <h3>确认无误后再保留</h3>
+              <p>在 Edge 下载面板中选择“…” →“保留”→“显示详细信息”→“仍然保留”。运行时若再次出现 SmartScreen，请先再次确认来源和校验值，再决定是否继续。</p>
+            </div>
+          </li>
+        </ol>
+
+        <div class="trust-actions">
+          <a href="https://github.com/laofutsit-design/photo-desktop-pet/releases/tag/v1.0.8" target="_blank" rel="noopener noreferrer">
+            查看 GitHub Release <i data-lucide="external-link" aria-hidden="true"></i>
+          </a>
+          <a href="https://learn.microsoft.com/en-us/deployedge/microsoft-edge-security-smartscreen" target="_blank" rel="noopener noreferrer">
+            了解 Microsoft SmartScreen <i data-lucide="external-link" aria-hidden="true"></i>
+          </a>
+        </div>
+      </div>
+    </dialog>
   </body>
 </html>

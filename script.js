@@ -201,6 +201,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const downloadHelpDialog = document.querySelector("[data-download-help-dialog]");
+  const downloadHelpTrigger = document.querySelector("[data-open-download-help]");
+  const downloadHelpClose = document.querySelector("[data-close-download-help]");
+
+  downloadHelpTrigger?.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (downloadHelpDialog?.showModal) downloadHelpDialog.showModal();
+  });
+
+  downloadHelpClose?.addEventListener("click", () => downloadHelpDialog?.close());
+  downloadHelpDialog?.addEventListener("click", (event) => {
+    if (event.target === downloadHelpDialog) downloadHelpDialog.close();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && downloadHelpDialog?.open) downloadHelpDialog.close();
+  });
+
   const checksumButton = document.querySelector("[data-copy-checksum]");
   const checksum = document.querySelector("[data-checksum]");
   checksumButton?.addEventListener("click", async () => {
