@@ -224,6 +224,55 @@ body {
   transform: translateX(-50%) rotate(45deg);
 }
 
+/* Keep the bubble inside the desktop when a pet peeks from an edge. */
+.bubble.bubble-direction-right {
+  left: 54%;
+  bottom: 40%;
+  translate: 0 50%;
+}
+
+.bubble.bubble-direction-right::after {
+  left: -8px;
+  top: 50%;
+  bottom: auto;
+  border-left: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-bottom: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-right: 0;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.bubble.bubble-direction-left {
+  right: 54%;
+  bottom: 40%;
+  translate: 0 50%;
+}
+
+.bubble.bubble-direction-left::after {
+  left: auto;
+  right: -8px;
+  top: 50%;
+  bottom: auto;
+  border-right: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-top: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-bottom: 0;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.bubble.bubble-direction-down {
+  top: calc(100% - 82px);
+  bottom: auto;
+}
+
+.bubble.bubble-direction-down::after {
+  top: -8px;
+  bottom: auto;
+  border-left: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-top: 1px solid rgb(var(--bubble-accent-rgb) / 35%);
+  border-right: 0;
+  border-bottom: 0;
+  transform: translateX(-50%) rotate(45deg);
+}
+
 .bubble.bubble-style-cream {
   color: #4f3f35;
   border: 2px solid rgb(var(--bubble-accent-rgb) / 55%);
@@ -247,6 +296,21 @@ body {
   border-right: 3px solid #332d34;
   border-bottom: 3px solid #332d34;
   background: #fff;
+}
+
+.bubble.bubble-direction-right.bubble-style-comic::after {
+  border-left: 3px solid #332d34;
+  border-bottom: 3px solid #332d34;
+}
+
+.bubble.bubble-direction-left.bubble-style-comic::after {
+  border-right: 3px solid #332d34;
+  border-top: 3px solid #332d34;
+}
+
+.bubble.bubble-direction-down.bubble-style-comic::after {
+  border-left: 3px solid #332d34;
+  border-top: 3px solid #332d34;
 }
 
 .bubble.bubble-style-neon {
