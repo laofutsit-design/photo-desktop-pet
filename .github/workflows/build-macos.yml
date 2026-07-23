@@ -34,6 +34,23 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run dist:mac
+      - name: Verify packaged Electron and sharp runtime
+        working-directory: desktop-app
+        shell: bash
+        run: |
+          app_executable="$(find dist -path '*/Photo Desktop Pet.app/Contents/MacOS/Photo Desktop Pet' -type f -print -quit)"
+          if [[ -z "$app_executable" ]]; then
+            echo "Packaged app executable was not found."
+            exit 1
+          fi
+          contents_dir="$(dirname "$(dirname "$app_executable")")"
+          app_asar="$contents_dir/Resources/app.asar"
+          runtime_output="$(ELECTRON_RUN_AS_NODE=1 "$app_executable" -e "const sharp = require(process.argv[1] + '/node_modules/sharp'); console.log(process.versions.node + ' sharp ' + sharp.versions.sharp)" "$app_asar")"
+          echo "Packaged runtime: $runtime_output"
+          if [[ ! "$runtime_output" =~ ^2[0-9]\. ]]; then
+            echo "Packaged Electron must embed Node 20 or newer."
+            exit 1
+          fi
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
