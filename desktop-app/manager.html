@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; img-src 'self' data: blob:; style-src 'self'; script-src 'self'" />
+    <title>管理已添加照片</title>
+    <link rel="stylesheet" href="manager.css" />
+  </head>
+  <body>
+    <main class="manager-card" role="dialog" aria-labelledby="managerTitle">
+      <header id="managerDragHandle" class="manager-header">
+        <strong id="managerTitle">管理已添加照片</strong>
+        <small id="managerSummary">拖动这里移动管理窗口 · 滚轮上下翻页</small>
+      </header>
+      <section class="group-tools" aria-label="角色分组">
+        <select id="groupSelect" title="选择角色"></select>
+        <input id="groupName" maxlength="30" aria-label="角色名称" placeholder="输入角色名称" title="输入角色名称，按 Enter 保存" />
+        <button id="renameGroup" type="button">保存名称</button>
+        <button id="createGroup" type="button">＋角色</button>
+        <button id="deleteGroup" class="danger-text" type="button">删除组</button>
+      </section>
+      <div id="managerList" class="manager-list" role="list"></div>
+      <p id="managerStatus" class="manager-status" aria-live="polite"></p>
+      <div class="manager-actions">
+        <button id="addPhotos" class="primary" type="button">添加照片</button>
+        <button id="closeManager" type="button">关闭</button>
+      </div>
+      <section id="formBubbleEditor" class="form-bubble-editor" hidden>
+        <div class="form-bubble-card">
+          <header id="formBubbleDragHandle" class="form-bubble-header">
+            <strong>这张照片的专属气泡</strong>
+            <small>拖动这里移动窗口 · 每行一条</small>
+          </header>
+          <small>留空时使用全局或性格气泡</small>
+          <textarea id="formPhrases" maxlength="5049" placeholder="例如：今天也一起加油吧！"></textarea>
+          <p id="formBubbleStatus" class="manager-status" aria-live="polite"></p>
+          <div class="manager-actions">
+            <button id="saveFormPhrases" class="primary" type="button">保存</button>
+            <button id="cancelFormPhrases" type="button">取消</button>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script src="manager-renderer.js"></script>
+  </body>
+</html>

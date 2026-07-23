@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data:; img-src 'self' data: blob:; style-src 'self'; script-src 'self'" />
+    <title>照片桌宠</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main id="stage">
+      <div id="bubble" class="bubble" aria-live="polite"></div>
+
+      <button id="importButton" class="import-card window-drag-surface" type="button">
+        <span class="import-icon">＋</span>
+        <strong>开始生成桌宠</strong>
+        <small>支持照片和 GIF，可多选或直接拖入</small>
+      </button>
+
+      <div id="dropHint" class="drop-hint" hidden>
+        <span>松开鼠标，添加桌宠形态</span>
+      </div>
+
+      <div id="loading" class="loading window-drag-surface" hidden>
+        <span class="spinner"></span>
+        <strong>正在认真抠图…</strong>
+        <small id="loadingDetail">首次使用需要下载本地模型，请稍候</small>
+      </div>
+
+      <div id="petPose" class="pet-pose" hidden>
+        <img id="pet" class="pet" alt="桌宠" draggable="false" />
+        <div id="petEffect" class="pet-effect" aria-hidden="true"></div>
+      </div>
+      <div id="error" class="error window-drag-surface" hidden></div>
+
+      <section id="bubbleEditor" class="bubble-editor" role="dialog" aria-modal="true" aria-labelledby="bubbleEditorTitle" hidden>
+        <div class="bubble-editor-card">
+          <header id="bubbleEditorDragHandle" class="bubble-editor-header window-drag-surface">
+            <strong id="bubbleEditorTitle">自定义气泡内容</strong>
+            <small>拖动这里可移动窗口</small>
+          </header>
+          <label for="customPhrasesInput">每行一条，对话时会随机选取</label>
+          <textarea id="customPhrasesInput" rows="6" maxlength="6000" placeholder="今天也要开心呀！&#10;记得喝水～"></textarea>
+          <div class="bubble-appearance-grid">
+            <label for="bubbleColorMode">气泡配色</label>
+            <select id="bubbleColorMode">
+              <option value="auto">跟随桌宠主色</option>
+              <option value="custom">自定义颜色</option>
+            </select>
+            <label for="bubbleColorInput">颜色</label>
+            <input id="bubbleColorInput" type="color" value="#ff9f72" />
+            <label for="bubbleFontSelect">文字字体</label>
+            <select id="bubbleFontSelect">
+              <option value="system">系统默认</option>
+              <option value="yahei">微软雅黑</option>
+              <option value="rounded">幼圆</option>
+              <option value="kaiti">楷体</option>
+              <option value="songti">宋体</option>
+              <option value="heiti">黑体</option>
+              <option value="shoujin">瘦金体</option>
+              <option value="xingkai">行书（华文行楷）</option>
+              <option value="lishu">隶书</option>
+              <option value="fangsong">仿宋</option>
+            </select>
+            <label for="bubbleStyleSelect">气泡框样式</label>
+            <select id="bubbleStyleSelect">
+              <option value="glass">通透玻璃</option>
+              <option value="cream">奶油便签</option>
+              <option value="comic">漫画对白</option>
+              <option value="neon">霓虹光环</option>
+              <option value="nebula">星云渐变</option>
+              <option value="minimal">极简细线</option>
+            </select>
+          </div>
+          <p id="bubbleEditorStatus" class="bubble-editor-status" aria-live="polite"></p>
+          <div class="bubble-editor-actions">
+            <button id="cancelBubbleEditor" type="button">取消</button>
+            <button id="saveBubbleEditor" class="primary" type="button">保存</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+    <script src="renderer.js"></script>
+  </body>
+</html>

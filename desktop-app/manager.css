@@ -1,0 +1,316 @@
+:root {
+  color-scheme: light;
+  font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #fffaf0;
+  user-select: none;
+}
+
+body {
+  padding: 0;
+}
+
+.manager-card {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid #eadbd1;
+  border-radius: 0;
+  color: #493d37;
+  background: #fffaf0;
+  box-shadow: none;
+}
+
+.manager-header {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 3px;
+  margin: -6px -6px 10px;
+  padding: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.manager-header:active {
+  cursor: grabbing;
+}
+
+.manager-header strong {
+  font-size: 18px;
+}
+
+.manager-header small {
+  color: #8b7d76;
+  font-size: 12px;
+}
+
+.group-tools {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.group-tools select,
+.group-tools input,
+.group-tools button,
+.item-tools select,
+.item-tools button {
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #e4d4ca;
+  border-radius: 8px;
+  color: #5f4d45;
+  background: white;
+  font: inherit;
+  font-size: 11px;
+  outline: none;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.group-tools input:focus,
+.group-tools select:focus,
+.item-tools select:focus {
+  border-color: #ff8f70;
+}
+
+.group-tools .danger-text {
+  color: #a13b32;
+}
+
+.manager-list {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  padding: 2px;
+}
+
+.manager-empty {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  place-items: center;
+  padding: 20px;
+  border: 1px dashed #dbc9bf;
+  border-radius: 13px;
+  color: #8b7d76;
+  font-size: 13px;
+  text-align: center;
+}
+
+.manager-item {
+  display: flex;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 2px solid transparent;
+  border-radius: 13px;
+  background: #f4ebe5;
+  flex-direction: column;
+}
+
+.manager-item.active {
+  border-color: #ff8f70;
+  background: #fff2ec;
+}
+
+.manager-select {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 6px;
+  border: 0;
+  color: #6c5a52;
+  background: transparent;
+  cursor: pointer;
+}
+
+.item-tools {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px;
+  padding: 0 5px 5px;
+}
+
+.item-tools button {
+  color: #8c4d3e;
+  background: #fffaf7;
+  cursor: pointer;
+}
+
+.manager-select img {
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
+  object-fit: contain;
+  border-radius: 8px;
+  background-color: white;
+  background-image:
+    linear-gradient(45deg, #eee 25%, transparent 25%),
+    linear-gradient(-45deg, #eee 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #eee 75%),
+    linear-gradient(-45deg, transparent 75%, #eee 75%);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+
+.manager-select span {
+  max-width: 100%;
+  flex: 0 0 auto;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manager-delete {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: white;
+  background: rgb(137 57 48 / 88%);
+  box-shadow: 0 1px 5px rgb(0 0 0 / 22%);
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 27px;
+}
+
+.manager-status {
+  min-height: 18px;
+  flex: 0 0 auto;
+  margin: 5px 0;
+  color: #a13b32;
+  font-size: 12px;
+}
+
+.manager-actions {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.manager-actions button {
+  padding: 8px 15px;
+  border: 0;
+  border-radius: 10px;
+  color: #6c5a52;
+  background: #f0e7e1;
+  cursor: pointer;
+  font: inherit;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.manager-actions button.primary {
+  color: white;
+  background: #ff8f70;
+}
+
+.manager-actions button:disabled,
+.manager-delete:disabled,
+.manager-select:disabled,
+.group-tools :disabled,
+.item-tools :disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.form-bubble-editor {
+  position: absolute;
+  inset: 8px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: rgb(62 49 43 / 28%);
+}
+
+.form-bubble-card {
+  display: flex;
+  width: calc(100% - 28px);
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px;
+  border-radius: 18px;
+  color: #493d37;
+  background: #fffaf0;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 24%);
+}
+
+.form-bubble-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: -7px -7px 2px;
+  padding: 7px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.form-bubble-header:active {
+  cursor: grabbing;
+}
+
+.form-bubble-card small {
+  color: #8b7d76;
+  font-size: 11px;
+}
+
+.form-bubble-card textarea {
+  width: 100%;
+  height: 150px;
+  resize: none;
+  padding: 9px;
+  border: 1px solid #e4d4ca;
+  border-radius: 10px;
+  color: #493d37;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+  user-select: text;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.form-bubble-card textarea:focus {
+  border-color: #ff8f70;
+}
+
+[hidden] {
+  display: none !important;
+}
