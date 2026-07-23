@@ -1,0 +1,5 @@
+{
+  "tag_name": "v1.1.14",
+  "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
+  "body": "改进更新检查：支持系统代理，并在 GitHub API 无法访问时自动使用官网备用通道。"
+}
