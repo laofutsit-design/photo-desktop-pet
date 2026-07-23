@@ -6,6 +6,7 @@
   "main": "main.js",
   "scripts": {
     "verify": "node ../../tools/verify-app.js .",
+    "verify:electron-runtime": "electron -e \"require('sharp'); console.log('sharp runtime ok:', process.versions.node)\"",
     "dist:mac": "electron-builder --mac dmg --x64 --publish never"
   },
   "dependencies": {
@@ -13,7 +14,7 @@
     "sharp": "0.35.3"
   },
   "devDependencies": {
-    "electron": "25.9.8",
+    "electron": "30.0.0",
     "electron-builder": "24.13.3"
   },
   "build": {
