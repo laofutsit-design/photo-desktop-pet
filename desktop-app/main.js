@@ -1,7 +1,6 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, shell, Tray } = require('electron');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
-const https = require('node:https');
 const path = require('node:path');
 const sharp = require('sharp');
 const { removeBackground } = require('./background-removal');
@@ -21,8 +20,11 @@ const MAX_CUSTOM_PHRASE_LENGTH = 100;
 const HIT_MASK_MAX_SIZE = 256;
 const DRAG_EDGE_TRIGGER_PX = 2;
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const UPDATE_REQUEST_TIMEOUT_MS = 12_000;
+const UPDATE_MANIFEST_URL = 'https://laofutsit-design.github.io/photo-desktop-pet/update.json';
 const UPDATE_API_URL = 'https://api.github.com/repos/laofutsit-design/photo-desktop-pet/releases/latest';
 const UPDATE_PAGE_URL = 'https://github.com/laofutsit-design/photo-desktop-pet/releases/latest';
+const UPDATE_WEBSITE_URL = 'https://laofutsit-design.github.io/photo-desktop-pet/';
 const BUBBLE_FONTS = new Set([
   'system', 'yahei', 'rounded', 'kaiti', 'songti', 'heiti',
   'shoujin', 'xingkai', 'lishu', 'fangsong',
@@ -286,32 +288,59 @@ function isNewerReleaseVersion(latestVersion, currentVersion) {
   return false;
 }
 
-function fetchLatestRelease() {
-  return new Promise((resolve, reject) => {
-    const request = https.get(UPDATE_API_URL, {
+async function fetchUpdateJson(url, headers) {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), UPDATE_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await net.fetch(url, {
+      headers,
+      cache: 'no-store',
+      signal: abortController.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (error) {
+    if (error?.name === 'AbortError') throw new Error('request timed out');
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function fetchLatestRelease() {
+  const sources = [
+    {
+      name: 'website',
+      url: UPDATE_MANIFEST_URL,
+      headers: { Accept: 'application/json' },
+    },
+    {
+      name: 'github',
+      url: UPDATE_API_URL,
       headers: {
         Accept: 'application/vnd.github+json',
         'User-Agent': 'photo-desktop-pet',
       },
-    }, (response) => {
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', (chunk) => { body += chunk; });
-      response.on('end', () => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`Update check failed with status ${response.statusCode}`));
-          return;
-        }
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          reject(new Error('Update check returned invalid JSON'));
-        }
-      });
-    });
-    request.setTimeout(10_000, () => request.destroy(new Error('Update check timed out')));
-    request.on('error', reject);
-  });
+    },
+  ];
+  const errors = [];
+
+  for (const source of sources) {
+    try {
+      const release = await fetchUpdateJson(source.url, source.headers);
+      const tagName = String(release?.tag_name || release?.version || '');
+      if (!parseReleaseVersion(tagName)) throw new Error('invalid version');
+      return {
+        ...release,
+        tag_name: tagName,
+        html_url: release.html_url || UPDATE_PAGE_URL,
+      };
+    } catch (error) {
+      errors.push(`${source.name}: ${error?.message || 'unknown error'}`);
+    }
+  }
+
+  throw new Error(errors.join('; '));
 }
 
 async function checkForUpdates({ force = false } = {}) {
@@ -352,12 +381,18 @@ async function checkForUpdates({ force = false } = {}) {
     if (result.response === 0) await shell.openExternal(release.html_url || UPDATE_PAGE_URL);
   } catch (error) {
     if (force) {
-      await dialog.showMessageBox(petWindow, {
+      const result = await dialog.showMessageBox(petWindow, {
         type: 'warning',
+        buttons: ['打开官网下载', '确定'],
+        defaultId: 1,
+        cancelId: 1,
         title: '照片桌宠',
         message: '暂时无法检查更新',
-        detail: '请检查网络连接后再试。',
+        detail: typeof net.isOnline !== 'function' || net.isOnline()
+          ? '无法连接官网和 GitHub 更新服务。你可以打开官网手动查看最新版本。'
+          : '电脑当前似乎没有联网。连接网络后请重试，或打开官网手动查看。',
       });
+      if (result.response === 0) await shell.openExternal(UPDATE_WEBSITE_URL);
     }
     console.warn('Update check failed', error);
   } finally {
