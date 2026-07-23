@@ -2,13 +2,13 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, screen, shell, Tray } = requi
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const https = require('node:https');
+const path = require('node:path');
+const sharp = require('sharp');
+const { removeBackground } = require('./background-removal');
 
 function appIconPath() {
   return path.join(__dirname, 'assets', process.platform === 'darwin' ? 'icon.png' : 'icon.ico');
 }
-const path = require('node:path');
-const sharp = require('sharp');
-const { removeBackground } = require('./background-removal');
 
 const DEFAULT_SIZE = 220;
 const MIN_SIZE = 120;
@@ -19,6 +19,7 @@ const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
 const MAX_CUSTOM_PHRASE_COUNT = 50;
 const MAX_CUSTOM_PHRASE_LENGTH = 100;
 const HIT_MASK_MAX_SIZE = 256;
+const DRAG_EDGE_TRIGGER_PX = 2;
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_API_URL = 'https://api.github.com/repos/laofutsit-design/photo-desktop-pet/releases/latest';
 const UPDATE_PAGE_URL = 'https://github.com/laofutsit-design/photo-desktop-pet/releases/latest';
@@ -1292,16 +1293,56 @@ function updateActiveDragPosition() {
     return;
   }
   const pointer = screen.getCursorScreenPoint();
-  const x = Math.round(activeDrag.origin.x + pointer.x - activeDrag.pointerOrigin.x);
-  const y = Math.round(activeDrag.origin.y + pointer.y - activeDrag.pointerOrigin.y);
-  if (x === activeDrag.lastPosition.x && y === activeDrag.lastPosition.y) return;
-  activeDrag.lastPosition = { x, y };
-  petWindow.setBounds({
-    x,
-    y,
+  const display = screen.getDisplayNearestPoint?.(pointer);
+  const displayBounds = display?.bounds;
+  const workArea = display?.workArea;
+  const candidateBounds = {
+    x: Math.round(activeDrag.origin.x + pointer.x - activeDrag.pointerOrigin.x),
+    y: Math.round(activeDrag.origin.y + pointer.y - activeDrag.pointerOrigin.y),
     width: activeDrag.origin.width,
     height: activeDrag.origin.height,
-  });
+  };
+  let previewEdge;
+  if (displayBounds) {
+    const distances = [
+      ['left', Math.abs(pointer.x - displayBounds.x)],
+      ['right', Math.abs(displayBounds.x + displayBounds.width - 1 - pointer.x)],
+      ['top', Math.abs(pointer.y - displayBounds.y)],
+      ['bottom', Math.abs(displayBounds.y + displayBounds.height - 1 - pointer.y)],
+    ].sort((left, right) => left[1] - right[1]);
+    if (distances[0][1] <= DRAG_EDGE_TRIGGER_PX) previewEdge = distances[0][0];
+  }
+  if (workArea && !previewEdge) {
+    const content = petContentBounds(candidateBounds);
+    const insideWorkArea = content.left > workArea.x
+      && content.right < workArea.x + workArea.width
+      && content.top > workArea.y
+      && content.bottom < workArea.y + workArea.height;
+    if (!activeDrag.edgeDetectionArmed && insideWorkArea) activeDrag.edgeDetectionArmed = true;
+    if (activeDrag.edgeDetectionArmed) {
+      const crossings = [
+        ['left', content.left - workArea.x],
+        ['right', workArea.x + workArea.width - content.right],
+        ['top', content.top - workArea.y],
+        ['bottom', workArea.y + workArea.height - content.bottom],
+      ].filter((entry) => entry[1] <= 0)
+        .sort((left, right) => left[1] - right[1]);
+      previewEdge = crossings[0]?.[0];
+    } else {
+      previewEdge = activeDrag.startingEdge;
+    }
+  }
+  if (previewEdge !== activeDrag.previewEdge) {
+    activeDrag.previewEdge = previewEdge;
+    activeDrag.previewDisplay = previewEdge ? display : undefined;
+    sendPetEdge(previewEdge);
+  }
+  const nextBounds = previewEdge
+    ? petBoundsAtEdge(candidateBounds, previewEdge, display)
+    : candidateBounds;
+  if (nextBounds.x === activeDrag.lastPosition.x && nextBounds.y === activeDrag.lastPosition.y) return;
+  activeDrag.lastPosition = { x: nextBounds.x, y: nextBounds.y };
+  petWindow.setBounds(nextBounds);
 }
 
 function sendPetEdge(edge, replay = true) {
@@ -1323,11 +1364,8 @@ function petContentBounds(bounds) {
   };
 }
 
-function placePetAtEdge(edge, replay = true) {
-  if (!petWindow || petWindow.isDestroyed()) return;
-  const bounds = petWindow.getBounds();
-  const display = screen.getDisplayMatching?.(bounds);
-  if (!display) return;
+function petBoundsAtEdge(bounds, edge, display) {
+  if (!display) return bounds;
   const workArea = display.workArea;
   const content = petContentBounds(bounds);
   const next = { ...bounds };
@@ -1344,38 +1382,27 @@ function placePetAtEdge(edge, replay = true) {
     next.y = Math.round(workArea.y - petTopInset - petSize * visualCut);
   } else if (edge === 'bottom') {
     next.y = workArea.y + workArea.height - bounds.height + content.bottomInset;
-  } else {
+  }
+  return next;
+}
+
+function placePetAtEdge(edge, replay = true, targetDisplay) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  const bounds = petWindow.getBounds();
+  const display = targetDisplay || screen.getDisplayMatching?.(bounds);
+  if (!display || !['left', 'right', 'top', 'bottom'].includes(edge)) {
     sendPetEdge(undefined);
     return;
   }
-
-  petWindow.setBounds(next);
+  petWindow.setBounds(petBoundsAtEdge(bounds, edge, display));
   sendPetEdge(edge, replay);
-}
-
-function settlePetAtNearestEdge() {
-  if (!petWindow || petWindow.isDestroyed()) return;
-  const bounds = petWindow.getBounds();
-  const display = screen.getDisplayMatching?.(bounds);
-  if (!display) return;
-  const workArea = display.workArea;
-  const content = petContentBounds(bounds);
-  const threshold = Math.max(28, Math.round(petSize * .16));
-  const distances = [
-    ['left', Math.abs(content.left - workArea.x)],
-    ['right', Math.abs(workArea.x + workArea.width - content.right)],
-    ['top', Math.abs(content.top - workArea.y)],
-    ['bottom', Math.abs(workArea.y + workArea.height - content.bottom)],
-  ].sort((left, right) => left[1] - right[1]);
-  if (distances[0][1] <= threshold) placePetAtEdge(distances[0][0]);
-  else sendPetEdge(undefined);
 }
 
 ipcMain.on('pet:begin-drag', (_event, request) => {
   if (!petWindow || petWindow.isDestroyed()) return;
   if (!Number.isSafeInteger(request?.id)) return;
   stopActiveDrag();
-  sendPetEdge(undefined);
+  const startingEdge = activePetEdge;
   setMousePassthrough(false);
   petWindow.focus();
   petWindowFocused = true;
@@ -1387,6 +1414,10 @@ ipcMain.on('pet:begin-drag', (_event, request) => {
     // Physical cursor coordinates prevent window-move events from feeding back into the drag delta.
     pointerOrigin: screen.getCursorScreenPoint(),
     lastPosition: { x: origin.x, y: origin.y },
+    startingEdge,
+    previewEdge: startingEdge,
+    previewDisplay: startingEdge ? screen.getDisplayMatching?.(origin) : undefined,
+    edgeDetectionArmed: !startingEdge,
     started: false,
   };
 });
@@ -1401,10 +1432,17 @@ ipcMain.on('pet:drag-to', (_event, request) => {
 });
 
 ipcMain.on('pet:end-drag', (_event, id) => {
-  if (activeDrag?.id === id && activeDrag.started) updateActiveDragPosition();
-  const shouldSettle = activeDrag?.id === id && activeDrag.started;
+  if (activeDrag?.id !== id) return;
+  if (!activeDrag.started) {
+    stopActiveDrag(id);
+    return;
+  }
+  updateActiveDragPosition();
+  const edge = activeDrag?.previewEdge;
+  const display = edge ? activeDrag.previewDisplay : undefined;
   stopActiveDrag(id);
-  if (shouldSettle) settlePetAtNearestEdge();
+  if (edge) placePetAtEdge(edge, true, display);
+  else sendPetEdge(undefined);
 });
 
 app.whenReady().then(async () => {
