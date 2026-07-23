@@ -200,4 +200,22 @@ document.addEventListener("DOMContentLoaded", () => {
       applyPosition();
     });
   }
+
+  const checksumButton = document.querySelector("[data-copy-checksum]");
+  const checksum = document.querySelector("[data-checksum]");
+  checksumButton?.addEventListener("click", async () => {
+    if (!checksum) return;
+    const label = checksumButton.querySelector("span");
+    try {
+      await navigator.clipboard.writeText(checksum.textContent.trim());
+      checksumButton.innerHTML = '<i data-lucide="check" aria-hidden="true"></i><span>已复制</span>';
+      renderIcons();
+      window.setTimeout(() => {
+        checksumButton.innerHTML = '<i data-lucide="copy" aria-hidden="true"></i><span>复制</span>';
+        renderIcons();
+      }, 1800);
+    } catch {
+      if (label) label.textContent = "请手动复制";
+    }
+  });
 });
