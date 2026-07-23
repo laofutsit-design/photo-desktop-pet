@@ -283,6 +283,16 @@ h1 {
   transform: translateY(-2px);
 }
 
+.download-button-secondary {
+  background: #236a68;
+  box-shadow: 0 14px 28px rgba(35, 106, 104, 0.22);
+}
+
+.download-button-secondary:hover {
+  background: #175552;
+  box-shadow: 0 18px 32px rgba(35, 106, 104, 0.3);
+}
+
 .release-note {
   color: #7b868a;
   font-size: 12px;
