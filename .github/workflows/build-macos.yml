@@ -26,6 +26,8 @@ jobs:
         run: npm ci --include=optional
       - name: Verify sharp in Electron runtime
         working-directory: desktop-app
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
         run: npm run verify:electron-runtime
       - name: Build unsigned Intel DMG
         working-directory: desktop-app
