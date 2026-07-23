@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="照片桌宠：把照片、动漫角色或 GIF 变成透明、可拖动、会回应的 Windows 桌面伙伴。照片仅在本机处理。" />
+    <meta name="description" content="照片桌宠：把照片、动漫角色或 GIF 变成透明、可拖动、会回应的 Windows 桌面伙伴。支持本地抠图、多角色、多形态、GIF、性格气泡与桌面互动。" />
     <meta name="theme-color" content="#f7f6f2" />
     <title>照片桌宠｜每一种喜欢，都值得陪在桌面</title>
     <link rel="icon" href="assets/icon.png" />
     <link rel="preload" href="assets/showcase-anime.jpg" as="image" />
-    <link rel="stylesheet" href="styles.css?v=1.1.6" />
+    <link rel="stylesheet" href="styles.css?v=1.1.6-rich" />
     <script defer src="https://unpkg.com/lucide@1.25.0/dist/umd/lucide.min.js"></script>
     <script defer src="script.js?v=1.1.6"></script>
   </head>
@@ -28,6 +28,7 @@
       <nav id="site-nav" class="site-nav" aria-label="主要导航" data-nav>
         <a href="#process">怎么玩</a>
         <a href="#gallery">角色画廊</a>
+        <a href="#features">功能亮点</a>
         <a href="#privacy">安全隐私</a>
         <a class="nav-download" href="https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.6/photo-desktop-pet-1.1.6-Windows-x64.exe">
           <i data-lucide="download" aria-hidden="true"></i>
@@ -180,40 +181,107 @@
         </div>
       </section>
 
+      <section class="story-section page-shell reveal" id="moments">
+        <div class="story-hero">
+          <img src="assets/showcase-workspace.svg" alt="阳光与绿植环绕的工作室里，一位白发猫耳角色陪在电脑旁" />
+          <div class="story-panel">
+            <p class="section-index">03 · 桌面时光</p>
+            <h2>让喜欢的角色，<br />融进每一种桌面时光。</h2>
+            <p>工作、学习或放空时，它都可以安静停在一旁；需要互动时，轻轻一点就会给你回应。</p>
+            <ul aria-label="适用场景">
+              <li><i data-lucide="briefcase-business" aria-hidden="true"></i>工作陪伴</li>
+              <li><i data-lucide="book-open" aria-hidden="true"></i>学习专注</li>
+              <li><i data-lucide="coffee" aria-hidden="true"></i>休息放空</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="story-secondary">
+          <figure class="story-dual">
+            <img src="assets/showcase-dual-characters.svg" alt="明亮与深色光影中的两位动漫角色" />
+            <figcaption>一组角色，多张照片，保存不同形态与氛围。</figcaption>
+          </figure>
+
+          <div class="story-details">
+            <p class="section-index">不止一个样子</p>
+            <h3>从一张图片，<br />到有性格的桌面伙伴。</h3>
+            <p>照片桌宠不只负责抠图。你可以按角色分组管理形态、保存独立气泡内容，并为每位伙伴选择不同的性格。</p>
+            <ul>
+              <li><i data-lucide="folders" aria-hidden="true"></i><span><strong>角色分组</strong>多个角色与形态清晰管理</span></li>
+              <li><i data-lucide="message-circle-heart" aria-hidden="true"></i><span><strong>自定义气泡</strong>保存属于每张照片的台词</span></li>
+              <li><i data-lucide="sparkles" aria-hidden="true"></i><span><strong>五种性格</strong>高冷、温柔、元气、傲娇与馋嘴</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
       <section class="features-section page-shell reveal" id="features">
         <div class="section-intro feature-intro">
-          <p class="section-index">03 · 轻巧功能</p>
-          <h2>贴心功能，<br />不打扰的陪伴。</h2>
+          <p class="section-index">04 · 功能亮点</p>
+          <h2>不只好看，<br />也懂得怎样陪伴。</h2>
+          <p>围绕桌面使用设计的交互、管理与隐私能力。</p>
         </div>
 
         <div class="feature-grid">
           <article class="feature-card">
             <i data-lucide="wand-sparkles" aria-hidden="true"></i>
-            <h3>本地抠图</h3>
-            <p>自动识别主体，在电脑内生成透明背景。</p>
+            <span class="feature-number">01</span>
+            <h3>本地智能抠图</h3>
+            <p>内置人物与动物分割模型，离线识别主体并生成透明背景。</p>
             <div class="feature-visual cutout-feature"><img src="assets/showcase-plush-cutout.png" alt="透明背景处理效果" /></div>
           </article>
           <article class="feature-card">
-            <i data-lucide="images" aria-hidden="true"></i>
-            <h3>多照片切换</h3>
-            <p>导入多张图片，一键切换角色的不同状态。</p>
+            <i data-lucide="folders" aria-hidden="true"></i>
+            <span class="feature-number">02</span>
+            <h3>多角色与多形态</h3>
+            <p>按角色分组保存多张照片，双击只在当前角色的形态中切换。</p>
             <div class="thumbnail-stack" aria-hidden="true">
               <img src="assets/showcase-plush-cutout.png" alt="" />
-              <img src="assets/showcase-anime.jpg" alt="" />
+              <img src="assets/showcase-dual-characters.svg" alt="" />
               <img src="assets/showcase-cat-still.png" alt="" />
             </div>
           </article>
           <article class="feature-card">
-            <i data-lucide="layers-3" aria-hidden="true"></i>
-            <h3>透明置顶</h3>
-            <p>始终陪在桌面，不遮挡正在做的事情。</p>
-            <div class="feature-window"><span></span><img src="assets/showcase-anime.jpg" alt="透明置顶的角色窗口示意" /></div>
+            <i data-lucide="clapperboard" aria-hidden="true"></i>
+            <span class="feature-number">03</span>
+            <h3>GIF 保留动作</h3>
+            <p>逐帧抠图并保留帧延迟与循环设置，最多支持 300 帧。</p>
+            <div class="feature-gif">
+              <img src="assets/showcase-cat.gif" alt="正在播放的猫咪 GIF 桌宠" />
+              <span><i data-lucide="play" aria-hidden="true"></i>动画保留</span>
+            </div>
           </article>
           <article class="feature-card">
-            <i data-lucide="eye-off" aria-hidden="true"></i>
-            <h3>随时隐藏</h3>
-            <p>需要专注时一键隐藏，想念时再把它叫回来。</p>
-            <div class="peek-feature"><img src="assets/showcase-plush-cutout.png" alt="从窗口边缘探出的玩偶桌宠" /></div>
+            <i data-lucide="mouse-pointer-click" aria-hidden="true"></i>
+            <span class="feature-number">04</span>
+            <h3>点击就会回应</h3>
+            <p>单击随机触发回弹、旋转、跳跃、抖动与弹跳等动作。</p>
+            <div class="interaction-visual">
+              <img src="assets/showcase-plush-cutout.png" alt="可点击互动的玩偶桌宠" />
+              <span>跳跃</span><span>旋转</span><span>回弹</span>
+            </div>
+          </article>
+          <article class="feature-card">
+            <i data-lucide="message-circle-heart" aria-hidden="true"></i>
+            <span class="feature-number">05</span>
+            <h3>性格与气泡</h3>
+            <p>选择角色性格，自定义台词、字体、颜色与玻璃质感。</p>
+            <div class="bubble-visual">
+              <img src="assets/showcase-cat-still.png" alt="" />
+              <p>今天也一起加油吧。</p>
+            </div>
+          </article>
+          <article class="feature-card">
+            <i data-lucide="panel-top" aria-hidden="true"></i>
+            <span class="feature-number">06</span>
+            <h3>贴合桌面的行为</h3>
+            <p>拖动定位、滚轮缩放、动态置顶、透明穿透与托盘隐藏。</p>
+            <div class="desktop-controls" aria-label="桌面行为功能">
+              <span><i data-lucide="move" aria-hidden="true"></i>自由拖动</span>
+              <span><i data-lucide="zoom-in" aria-hidden="true"></i>滚轮缩放</span>
+              <span><i data-lucide="pin" aria-hidden="true"></i>始终置顶</span>
+              <span><i data-lucide="eye-off" aria-hidden="true"></i>托盘隐藏</span>
+            </div>
           </article>
         </div>
       </section>
@@ -222,7 +290,7 @@
         <img class="privacy-art privacy-art-left" src="assets/showcase-anime.jpg" alt="" />
         <div class="privacy-inner page-shell">
           <div class="privacy-heading">
-            <p class="section-index">04 · 隐私优先</p>
+            <p class="section-index">05 · 隐私优先</p>
             <h2>你的照片，<br />只属于你的电脑。</h2>
             <a href="privacy.html">查看完整隐私说明 <i data-lucide="arrow-right" aria-hidden="true"></i></a>
           </div>
@@ -268,6 +336,7 @@
       <nav aria-label="页脚导航">
         <a href="#process">怎么玩</a>
         <a href="#gallery">角色画廊</a>
+        <a href="#features">功能亮点</a>
         <a href="privacy.html">安全隐私</a>
         <a href="#download-help" data-open-download-help>下载安全说明</a>
         <a href="https://github.com/laofutsit-design" rel="noreferrer">GitHub</a>
