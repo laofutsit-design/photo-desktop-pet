@@ -1,4 +1,5 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, shell, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, Tray } = require('electron');
+const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -21,10 +22,11 @@ const HIT_MASK_MAX_SIZE = 256;
 const DRAG_EDGE_TRIGGER_PX = 2;
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_REQUEST_TIMEOUT_MS = 12_000;
+const UPDATE_DOWNLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const UPDATE_MAX_BYTES = 1024 * 1024 * 1024;
 const UPDATE_MANIFEST_URL = 'https://laofutsit-design.github.io/photo-desktop-pet/update.json';
 const UPDATE_API_URL = 'https://api.github.com/repos/laofutsit-design/photo-desktop-pet/releases/latest';
-const UPDATE_PAGE_URL = 'https://github.com/laofutsit-design/photo-desktop-pet/releases/latest';
-const UPDATE_WEBSITE_URL = 'https://laofutsit-design.github.io/photo-desktop-pet/';
+const UPDATE_RELEASE_BASE_URL = 'https://github.com/laofutsit-design/photo-desktop-pet/releases/download';
 const BUBBLE_FONTS = new Set([
   'system', 'yahei', 'rounded', 'kaiti', 'songti', 'heiti',
   'shoujin', 'xingkai', 'lishu', 'fangsong',
@@ -333,7 +335,6 @@ async function fetchLatestRelease() {
       return {
         ...release,
         tag_name: tagName,
-        html_url: release.html_url || UPDATE_PAGE_URL,
       };
     } catch (error) {
       errors.push(`${source.name}: ${error?.message || 'unknown error'}`);
@@ -343,11 +344,212 @@ async function fetchLatestRelease() {
   throw new Error(errors.join('; '));
 }
 
+function normalizeSha256(value) {
+  const match = String(value || '').match(/(?:sha256:)?\s*([a-f0-9]{64})/i);
+  return match?.[1]?.toLowerCase();
+}
+
+function assertAllowedUpdateUrl(value) {
+  const url = new URL(String(value || ''));
+  const allowedHost = url.hostname === 'github.com'
+    || url.hostname === 'laofutsit-design.github.io'
+    || url.hostname.endsWith('.githubusercontent.com');
+  if (url.protocol !== 'https:' || !allowedHost) throw new Error('更新包下载地址不安全');
+  return url.toString();
+}
+
+function resolveWindowsUpdate(release, latestVersion) {
+  const version = String(latestVersion || '').replace(/^v/i, '');
+  if (!parseReleaseVersion(version)) throw new Error('更新版本号无效');
+  const windows = release?.windows && typeof release.windows === 'object' ? release.windows : {};
+  const assets = Array.isArray(release?.assets) ? release.assets : [];
+  const executableAssets = assets.filter((asset) => (
+    typeof asset?.name === 'string'
+    && /\.exe$/i.test(asset.name)
+    && !/uninstall/i.test(asset.name)
+  ));
+  const executable = executableAssets.find((asset) => (
+    asset.name.includes(version) && /(?:windows|win)[-_ ]?(?:x64|64)/i.test(asset.name)
+  )) || executableAssets.find((asset) => asset.name.includes(version))
+    || executableAssets.find((asset) => /(?:windows|win)/i.test(asset.name));
+  const downloadUrl = windows.url
+    || release?.download_url
+    || executable?.browser_download_url
+    || `${UPDATE_RELEASE_BASE_URL}/v${version}/photo-desktop-pet-${version}-Windows-x64.exe`;
+  const executableName = executable?.name || path.basename(new URL(downloadUrl).pathname);
+  const checksumAsset = assets.find((asset) => (
+    typeof asset?.name === 'string'
+    && typeof asset?.browser_download_url === 'string'
+    && (asset.name === `${executableName}.sha256.txt`
+      || (/sha256/i.test(asset.name) && asset.name.includes(version)))
+  ));
+  const sha256 = normalizeSha256(
+    windows.sha256 || release?.sha256 || executable?.digest,
+  );
+  const sha256Url = windows.sha256_url
+    || release?.sha256_url
+    || checksumAsset?.browser_download_url
+    || `${downloadUrl}.sha256.txt`;
+
+  return {
+    version,
+    downloadUrl: assertAllowedUpdateUrl(downloadUrl),
+    sha256,
+    sha256Url: assertAllowedUpdateUrl(sha256Url),
+    expectedBytes: Number.isSafeInteger(executable?.size) && executable.size > 0
+      ? executable.size
+      : (Number.isSafeInteger(windows.size) && windows.size > 0 ? windows.size : undefined),
+  };
+}
+
+async function fetchExpectedUpdateHash(update) {
+  if (update.sha256) return update.sha256;
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), UPDATE_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await net.fetch(update.sha256Url, {
+      headers: { Accept: 'text/plain', 'User-Agent': 'photo-desktop-pet' },
+      cache: 'no-store',
+      signal: abortController.signal,
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const hash = normalizeSha256(await response.text());
+    if (!hash) throw new Error('invalid checksum');
+    return hash;
+  } catch (error) {
+    throw new Error(`无法取得更新包校验值：${error?.message || 'unknown error'}`);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function sendUpdateStatus(message) {
+  if (!petWindow || petWindow.isDestroyed()) return;
+  petWindow.webContents?.send?.('pet:update-status', { message });
+}
+
+async function downloadUpdateInstaller(update, expectedHash) {
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), UPDATE_DOWNLOAD_TIMEOUT_MS);
+  const updateDirectory = path.join(app.getPath('temp'), 'photo-desktop-pet-updates');
+  const installerPath = path.join(
+    updateDirectory,
+    `photo-desktop-pet-${update.version}-Windows-x64.exe`,
+  );
+  const temporaryPath = `${installerPath}.download`;
+  await fs.mkdir(updateDirectory, { recursive: true });
+  await fs.unlink(temporaryPath).catch(() => {});
+
+  let file;
+  try {
+    const response = await net.fetch(update.downloadUrl, {
+      headers: {
+        Accept: 'application/octet-stream',
+        'User-Agent': 'photo-desktop-pet',
+      },
+      cache: 'no-store',
+      signal: abortController.signal,
+    });
+    if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
+    const responseBytes = Number(response.headers.get('content-length'));
+    const totalBytes = update.expectedBytes || (
+      Number.isSafeInteger(responseBytes) && responseBytes > 0 ? responseBytes : undefined
+    );
+    if (totalBytes && totalBytes > UPDATE_MAX_BYTES) throw new Error('更新包大小异常');
+
+    file = await fs.open(temporaryPath, 'w');
+    const hash = crypto.createHash('sha256');
+    const reader = response.body.getReader();
+    let received = 0;
+    let lastProgress = -10;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = Buffer.from(value);
+      received += chunk.length;
+      if (received > UPDATE_MAX_BYTES) throw new Error('更新包超过大小限制');
+      await file.write(chunk);
+      hash.update(chunk);
+      if (totalBytes) {
+        const progress = Math.min(100, Math.floor((received / totalBytes) * 100));
+        if (progress >= lastProgress + 10) {
+          lastProgress = progress;
+          sendUpdateStatus(`正在下载更新 ${progress}%`);
+        }
+      }
+    }
+    await file.close();
+    file = undefined;
+
+    if (received < 1024 * 1024) throw new Error('下载的更新包不完整');
+    if (update.expectedBytes && received !== update.expectedBytes) {
+      throw new Error('更新包大小与发布信息不一致');
+    }
+    if (hash.digest('hex') !== expectedHash) throw new Error('更新包 SHA-256 校验失败');
+    await fs.unlink(installerPath).catch(() => {});
+    await fs.rename(temporaryPath, installerPath);
+    return installerPath;
+  } catch (error) {
+    await file?.close().catch(() => {});
+    await fs.unlink(temporaryPath).catch(() => {});
+    if (error?.name === 'AbortError') throw new Error('下载更新超时');
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function quotePowerShellLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function installUpdateAfterQuit(installerPath) {
+  if (process.platform !== 'win32') throw new Error('当前系统暂不支持自动安装');
+  const currentExecutable = process.execPath;
+  const defaultExecutable = path.join(
+    process.env.LOCALAPPDATA || path.dirname(currentExecutable),
+    'Programs',
+    '照片桌宠',
+    '照片桌宠.exe',
+  );
+  const script = [
+    `$oldProcess = Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue`,
+    'if ($oldProcess) { Wait-Process -Id $oldProcess.Id -ErrorAction SilentlyContinue }',
+    `$installer = Start-Process -FilePath ${quotePowerShellLiteral(installerPath)} -ArgumentList '/S' -PassThru -Wait`,
+    'if ($installer.ExitCode -eq 0) {',
+    `  $currentExecutable = ${quotePowerShellLiteral(currentExecutable)}`,
+    `  $defaultExecutable = ${quotePowerShellLiteral(defaultExecutable)}`,
+    '  if (Test-Path -LiteralPath $currentExecutable) {',
+    '    Start-Process -FilePath $currentExecutable',
+    '  } elseif (Test-Path -LiteralPath $defaultExecutable) {',
+    '    Start-Process -FilePath $defaultExecutable',
+    '  }',
+    '}',
+    `Remove-Item -LiteralPath ${quotePowerShellLiteral(installerPath)} -Force -ErrorAction SilentlyContinue`,
+  ].join('\r\n');
+  const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
+  const helper = spawn('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-EncodedCommand',
+    encodedScript,
+  ], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+  });
+  helper.unref();
+  app.quit();
+}
+
 async function checkForUpdates({ force = false } = {}) {
   if (updateCheckInFlight) return;
   if (!force && Date.now() - lastUpdateCheckAt < UPDATE_CHECK_INTERVAL_MS) return;
 
   updateCheckInFlight = true;
+  let updateRequested = false;
   lastUpdateCheckAt = Date.now();
   saveSettings().catch((error) => console.warn('Unable to save update-check time', error));
 
@@ -367,32 +569,49 @@ async function checkForUpdates({ force = false } = {}) {
       return;
     }
 
+    const canAutoInstall = process.platform === 'win32';
+    const actionDetail = canAutoInstall
+      ? '确认后将自动下载、安装并重新打开；照片和设置会保留。'
+      : '确认后将打开官网下载页面，请选择适合当前 Mac 的安装包。';
     const result = await dialog.showMessageBox(petWindow, {
       type: 'info',
-      buttons: ['立即下载', '以后再说'],
+      buttons: [canAutoInstall ? '下载并自动安装' : '打开下载页面', '以后再说'],
       defaultId: 0,
       cancelId: 1,
       title: '照片桌宠有新版本',
       message: `发现新版本 v${latestVersion}`,
       detail: typeof release.body === 'string' && release.body.trim()
-        ? release.body.trim().slice(0, 500)
-        : '已修复问题并带来新的功能体验。',
+        ? `${release.body.trim().slice(0, 420)}\n\n${actionDetail}`
+        : actionDetail,
     });
-    if (result.response === 0) await shell.openExternal(release.html_url || UPDATE_PAGE_URL);
+    if (result.response !== 0) return;
+    if (!canAutoInstall) {
+      await shell.openExternal(release.html_url || UPDATE_WEBSITE_URL);
+      return;
+    }
+
+    updateRequested = true;
+    sendUpdateStatus('正在准备更新…');
+    const update = resolveWindowsUpdate(release, latestVersion);
+    const expectedHash = await fetchExpectedUpdateHash(update);
+    const installerPath = await downloadUpdateInstaller(update, expectedHash);
+    sendUpdateStatus('下载完成，正在安装更新…');
+    installUpdateAfterQuit(installerPath);
   } catch (error) {
-    if (force) {
-      const result = await dialog.showMessageBox(petWindow, {
+    if (force || updateRequested) {
+      await dialog.showMessageBox(petWindow, {
         type: 'warning',
-        buttons: ['打开官网下载', '确定'],
-        defaultId: 1,
-        cancelId: 1,
+        buttons: ['确定'],
+        defaultId: 0,
+        cancelId: 0,
         title: '照片桌宠',
-        message: '暂时无法检查更新',
-        detail: typeof net.isOnline !== 'function' || net.isOnline()
-          ? '无法连接官网和 GitHub 更新服务。你可以打开官网手动查看最新版本。'
-          : '电脑当前似乎没有联网。连接网络后请重试，或打开官网手动查看。',
+        message: updateRequested ? '自动更新失败' : '暂时无法检查更新',
+        detail: updateRequested
+          ? `没有安装任何内容，请稍后重试。\n${error?.message || '未知错误'}`
+          : (typeof net.isOnline !== 'function' || net.isOnline()
+            ? '无法连接更新服务，请稍后重试。'
+            : '电脑当前似乎没有联网，请连接网络后重试。'),
       });
-      if (result.response === 0) await shell.openExternal(UPDATE_WEBSITE_URL);
     }
     console.warn('Update check failed', error);
   } finally {
