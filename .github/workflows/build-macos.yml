@@ -29,6 +29,9 @@ jobs:
         env:
           ELECTRON_RUN_AS_NODE: '1'
         run: npm run verify:electron-runtime
+      - name: Install sharp Intel runtime
+        working-directory: desktop-app
+        run: npm install --no-save --package-lock=false --include=optional --os=darwin --cpu=x64 sharp@0.35.3
       - name: Build unsigned Intel DMG
         working-directory: desktop-app
         env:
