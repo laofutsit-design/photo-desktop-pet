@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('desktopPet', {
     (_event, state) => callback(state),
   ),
   onModelProgress: (callback) => ipcRenderer.on('pet:model-progress', (_event, progress) => callback(progress)),
+  onUpdateStatus: (callback) => ipcRenderer.on('pet:update-status', (_event, state) => callback(state)),
   onPersonalityChanged: (callback) => ipcRenderer.on(
     'pet:personality-changed',
     (_event, nextPersonality) => callback(nextPersonality),
