@@ -1258,6 +1258,9 @@ window.desktopPet.onLibraryMetadataChanged((state) => {
 window.desktopPet.onSizeChanged(setPetSize);
 window.desktopPet.onEdgeAction?.(setPetEdge);
 window.desktopPet.onSpecialAction?.(playSpecialAction);
+window.desktopPet.onUpdateStatus?.((state) => {
+  if (typeof state?.message === 'string' && state.message) showBubble(state.message);
+});
 window.desktopPet.onModelProgress(({
   photoIndex,
   photoCount,
