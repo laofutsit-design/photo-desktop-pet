@@ -38,7 +38,7 @@ jobs:
         working-directory: desktop-app
         shell: bash
         run: |
-          app_executable="$(find dist -path '*/Photo Desktop Pet.app/Contents/MacOS/Photo Desktop Pet' -type f -print -quit)"
+          app_executable="$(find "$PWD/dist" -path '*/Photo Desktop Pet.app/Contents/MacOS/Photo Desktop Pet' -type f -print -quit)"
           if [[ -z "$app_executable" ]]; then
             echo "Packaged app executable was not found."
             exit 1
