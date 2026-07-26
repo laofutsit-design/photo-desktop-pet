@@ -1,5 +1,10 @@
 {
-  "tag_name": "v1.1.14",
+  "tag_name": "v1.1.15",
   "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
-  "body": "改进更新检查：支持系统代理，并在 GitHub API 无法访问时自动使用官网备用通道。"
+  "body": "新增安全的更新下载安装流程；Windows 可校验安装包后自动更新，Mac 会打开官网下载页面。",
+  "windows": {
+    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.15/photo-desktop-pet-1.1.15-Windows-x64.exe",
+    "sha256": "14FBEC88EAA4E7304369E5E23F0C3D06BFBBF7B16316B4178381E1B21FCF26E9",
+    "size": 285332208
+  }
 }
