@@ -8,6 +8,9 @@ const groupName = document.querySelector('#groupName');
 const renameGroupButton = document.querySelector('#renameGroup');
 const createGroupButton = document.querySelector('#createGroup');
 const deleteGroupButton = document.querySelector('#deleteGroup');
+const groupProfile = document.querySelector('#groupProfile');
+const groupProfileInfo = document.querySelector('#groupProfileInfo');
+const saveGroupProfileButton = document.querySelector('#saveGroupProfile');
 const formBubbleEditor = document.querySelector('#formBubbleEditor');
 const formPhrases = document.querySelector('#formPhrases');
 const formBubbleStatus = document.querySelector('#formBubbleStatus');
@@ -31,6 +34,10 @@ let lastWheelAt = 0;
 let managerDrag;
 let nextManagerDragId = 0;
 
+function updateProfileInfo() {
+  groupProfileInfo.textContent = `${groupProfile.value.length}/20000 字 · 完全在本地分析，用来生成符合设定的动作、气泡和字体。`;
+}
+
 function applyState(state, keepSelection = true) {
   if (Array.isArray(state?.forms)) forms = state.forms;
   if (Array.isArray(state?.formMetadata)) formMetadata = state.formMetadata;
@@ -38,7 +45,7 @@ function applyState(state, keepSelection = true) {
     formMetadata = forms.map(() => ({ groupId: 'default', phrases: [] }));
   }
   if (Array.isArray(state?.groups) && state.groups.length > 0) groups = state.groups;
-  else if (groups.length === 0) groups = [{ id: 'default', name: '角色 1' }];
+  else if (groups.length === 0) groups = [{ id: 'default', name: '角色 1', profile: '' }];
   if (Number.isInteger(state?.activeIndex)) activeIndex = state.activeIndex;
   activeGroupId = state?.activeGroupId || formMetadata[activeIndex]?.groupId || groups[0].id;
   if (!keepSelection || !groups.some((group) => group.id === selectedGroupId)) {
@@ -62,7 +69,17 @@ function renderGroups() {
   groupSelect.value = selectedGroupId;
   const selected = groups.find((group) => group.id === selectedGroupId);
   groupName.value = selected?.name || '';
-  for (const element of [groupSelect, groupName, renameGroupButton, createGroupButton, deleteGroupButton]) {
+  groupProfile.value = selected?.profile || '';
+  updateProfileInfo();
+  for (const element of [
+    groupSelect,
+    groupName,
+    groupProfile,
+    renameGroupButton,
+    saveGroupProfileButton,
+    createGroupButton,
+    deleteGroupButton,
+  ]) {
     element.disabled = busy;
   }
   deleteGroupButton.disabled = busy || groups.length <= 1;
@@ -264,6 +281,21 @@ groupName.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter') return;
   event.preventDefault();
   renameSelectedGroup();
+});
+function saveSelectedGroupProfile() {
+  const profile = groupProfile.value;
+  return run(
+    () => window.desktopPet.setManagedGroupProfile(selectedGroupId, profile),
+    profile.trim() ? '角色设定已保存，动作和气泡已自动调整。' : '角色设定已清空。',
+  );
+}
+
+saveGroupProfileButton.addEventListener('click', saveSelectedGroupProfile);
+groupProfile.addEventListener('input', updateProfileInfo);
+groupProfile.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey && event.key === 'Enter')) return;
+  event.preventDefault();
+  saveSelectedGroupProfile();
 });
 createGroupButton.addEventListener('click', () => run(async () => {
   const state = await window.desktopPet.createManagedGroup();

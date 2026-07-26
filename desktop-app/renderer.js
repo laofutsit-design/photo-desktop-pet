@@ -85,7 +85,7 @@ let activeGroupId = 'default';
 let activeFormIndex = 0;
 let customPhrases = [];
 let bubbleAppearance = {
-  colorMode: 'auto', color: '#ff9f72', font: 'system', style: 'glass',
+  colorMode: 'auto', color: '#ff9f72', font: 'profile', style: 'glass',
 };
 let autoBubbleColor = '#ff9f72';
 let bubbleColorRequest = 0;
@@ -112,6 +112,28 @@ let pendingImportGroupId;
 let activeEdge;
 let specialActionTimer;
 let activeHeadProfile = { left: .08, top: .02, right: .92, bottom: .66 };
+const characterBehaviorCache = new Map();
+
+function characterBehavior(groupId = activeGroupId) {
+  const group = groups.find((item) => item.id === groupId);
+  const profile = String(group?.profile || '').trim();
+  const cacheKey = `${group?.name || ''}\0${profile}`;
+  const cached = characterBehaviorCache.get(groupId);
+  if (cached?.key === cacheKey) return cached.behavior;
+  const behavior = window.CharacterProfile?.analyzeCharacterProfile({
+    name: group?.name || '我',
+    profile,
+  }) || {
+    phrases: [],
+    clickActions: interactions,
+    idleActions,
+    specialActions: [],
+    actionPhrases: {},
+    font: 'system',
+  };
+  characterBehaviorCache.set(groupId, { key: cacheKey, behavior });
+  return behavior;
+}
 
 function setPetSize(size) {
   petSize = size;
@@ -137,12 +159,15 @@ function rgbToHex(r, g, b) {
 
 function applyBubbleAppearance(appearance = bubbleAppearance) {
   const color = appearance.colorMode === 'custom' ? appearance.color : autoBubbleColor;
+  const requestedFont = appearance.font === 'profile'
+    ? characterBehavior().font
+    : appearance.font;
   const { r, g, b } = hexToRgb(color);
   document.documentElement.style.setProperty('--bubble-accent', color);
   document.documentElement.style.setProperty('--bubble-accent-rgb', `${r} ${g} ${b}`);
   document.documentElement.style.setProperty(
     '--bubble-font',
-    bubbleFontStacks[appearance.font] || bubbleFontStacks.system,
+    bubbleFontStacks[requestedFont] || bubbleFontStacks.system,
   );
   for (const style of bubbleStyles) bubble.classList.remove(`bubble-style-${style}`);
   const style = bubbleStyles.has(appearance.style) ? appearance.style : 'glass';
@@ -244,11 +269,14 @@ function recoverUiAfter(delay, fallback = petForms.length > 0 ? 'ready' : 'empty
 
 function randomPhrase() {
   const photoPhrases = formMetadata[activeFormIndex]?.phrases;
+  const generatedPhrases = characterBehavior().phrases;
   const phrases = photoPhrases?.length > 0
     ? photoPhrases
-    : (customPhrases.length > 0
-      ? customPhrases
-      : (personalityPhrases[personality] || personalityPhrases.calm));
+    : (generatedPhrases.length > 0
+      ? generatedPhrases
+      : (customPhrases.length > 0
+        ? customPhrases
+        : (personalityPhrases[personality] || personalityPhrases.calm)));
   if (phrases.length === 1) return phrases[0];
   let next = phrases[Math.floor(Math.random() * phrases.length)];
   while (next === lastPhrase) next = phrases[Math.floor(Math.random() * phrases.length)];
@@ -263,7 +291,8 @@ function showBubble(message = randomPhrase()) {
   void bubble.offsetWidth;
   bubble.classList.add(bubbleEffects[Math.floor(Math.random() * bubbleEffects.length)]);
   bubble.classList.add('show');
-  bubbleTimer = setTimeout(() => bubble.classList.remove('show'), 2300);
+  const visibleDuration = Math.min(5200, 2100 + String(message).length * 52);
+  bubbleTimer = setTimeout(() => bubble.classList.remove('show'), visibleDuration);
 }
 
 function resetSpecialAction() {
@@ -276,8 +305,9 @@ function resetSpecialAction() {
 
 function interact() {
   resetSpecialAction();
-  const animation = interactions[interactionIndex];
-  interactionIndex = (interactionIndex + 1) % interactions.length;
+  const preferredActions = characterBehavior().clickActions;
+  const animation = preferredActions[interactionIndex % preferredActions.length];
+  interactionIndex = (interactionIndex + 1) % preferredActions.length;
   pet.classList.remove(...allActions);
   void pet.offsetWidth;
   pet.classList.add(animation);
@@ -303,7 +333,12 @@ function playSpecialAction(action) {
   pet.classList.add(settings.className);
   petEffect.classList.add(`effect-${action}`);
   trackPetAnimationHitTest(settings.duration + 150);
-  showBubble(settings.phrase);
+  const profilePhrases = characterBehavior().actionPhrases?.[action] || [];
+  showBubble(
+    profilePhrases.length > 0
+      ? profilePhrases[Math.floor(Math.random() * profilePhrases.length)]
+      : settings.phrase,
+  );
   specialActionTimer = setTimeout(() => {
     pet.classList.remove(settings.className);
     petEffect.className = 'pet-effect';
@@ -324,7 +359,13 @@ function runIdleAction() {
     scheduleIdleAction();
     return;
   }
-  const animation = idleActions[Math.floor(Math.random() * idleActions.length)];
+  const behavior = characterBehavior();
+  if (behavior.specialActions.length > 0 && Math.random() < .16) {
+    const action = behavior.specialActions[Math.floor(Math.random() * behavior.specialActions.length)];
+    playSpecialAction(action);
+    return;
+  }
+  const animation = behavior.idleActions[Math.floor(Math.random() * behavior.idleActions.length)];
   pet.classList.remove(...allActions);
   void pet.offsetWidth;
   pet.classList.add(animation);
@@ -337,6 +378,7 @@ function activatePetForm(index) {
   if (!Number.isInteger(index) || !petForms[index]) return false;
   activeFormIndex = index;
   activeGroupId = formMetadata[index]?.groupId || activeGroupId;
+  applyBubbleAppearance();
   const animationStartedAt = performance.now();
   pet.src = petForms[index];
   preparePetHitMask(petForms[index], index, animationStartedAt);
@@ -853,6 +895,7 @@ async function replacePetForms(state) {
   groups = Array.isArray(state?.groups) && state.groups.length > 0
     ? state.groups
     : [{ id: 'default', name: '角色 1' }];
+  characterBehaviorCache.clear();
   activeGroupId = typeof state?.activeGroupId === 'string'
     ? state.activeGroupId
     : formMetadata[state?.activeIndex]?.groupId || groups[0].id;
@@ -1130,7 +1173,9 @@ function readBubbleAppearance() {
     color: /^#[0-9a-f]{6}$/i.test(bubbleColorInput.value)
       ? bubbleColorInput.value.toLowerCase()
       : '#ff9f72',
-    font: bubbleFontStacks[bubbleFontSelect.value] ? bubbleFontSelect.value : 'system',
+    font: bubbleFontSelect.value === 'profile' || bubbleFontStacks[bubbleFontSelect.value]
+      ? bubbleFontSelect.value
+      : 'profile',
     style: bubbleStyles.has(bubbleStyleSelect.value) ? bubbleStyleSelect.value : 'glass',
   };
 }
@@ -1253,6 +1298,8 @@ window.desktopPet.onLibraryMetadataChanged((state) => {
   }
   if (Array.isArray(state?.groups) && state.groups.length > 0) groups = state.groups;
   if (typeof state?.activeGroupId === 'string') activeGroupId = state.activeGroupId;
+  characterBehaviorCache.clear();
+  applyBubbleAppearance();
   lastPhrase = '';
 });
 window.desktopPet.onSizeChanged(setPetSize);

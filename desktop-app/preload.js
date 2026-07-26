@@ -96,6 +96,9 @@ contextBridge.exposeInMainWorld('desktopPet', {
   addManagedPhotos: (groupId) => ipcRenderer.invoke('manager:add-photos', groupId),
   createManagedGroup: () => ipcRenderer.invoke('manager:create-group'),
   renameManagedGroup: (groupId, name) => ipcRenderer.invoke('manager:rename-group', groupId, name),
+  setManagedGroupProfile: (groupId, profile) => ipcRenderer.invoke(
+    'manager:set-group-profile', groupId, profile,
+  ),
   deleteManagedGroup: (groupId) => ipcRenderer.invoke('manager:delete-group', groupId),
   activateManagedGroup: (groupId) => ipcRenderer.invoke('manager:set-group', groupId),
   moveManagedForm: (index, groupId) => ipcRenderer.invoke('manager:move-form', index, groupId),

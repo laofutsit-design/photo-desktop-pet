@@ -147,6 +147,10 @@ function keepRelevantComponents(mask, width, height) {
       if (index < mask.length - width) add(index + width);
       if (x > 0) add(index - 1);
       if (x < width - 1) add(index + 1);
+      if (x > 0 && index >= width) add(index - width - 1);
+      if (x < width - 1 && index >= width) add(index - width + 1);
+      if (x > 0 && index < mask.length - width) add(index + width - 1);
+      if (x < width - 1 && index < mask.length - width) add(index + width + 1);
     }
     return { seed, size: tail, minX, minY, maxX, maxY };
   };
@@ -158,8 +162,17 @@ function keepRelevantComponents(mask, width, height) {
 
   if (components.length === 0) return new Uint8Array(mask.length);
   const largest = components.reduce((best, item) => (item.size > best.size ? item : best));
-  const minimumSize = Math.max(12, Math.round(largest.size * .0015));
-  const nearbyDistance = Math.max(width, height) * .055;
+  const pixelCount = width * height;
+  const minimumSize = Math.max(
+    12,
+    Math.round(pixelCount * .00008),
+    Math.round(largest.size * .0008),
+  );
+  const independentSubjectSize = Math.max(
+    Math.round(pixelCount * .00045),
+    Math.round(largest.size * .0035),
+  );
+  const nearbyDistance = Math.max(width, height) * .075;
   const output = new Uint8Array(mask.length);
 
   for (const component of components) {
@@ -174,9 +187,9 @@ function keepRelevantComponents(mask, width, height) {
       component.minY - largest.maxY - 1,
     );
     const isNearby = Math.hypot(horizontalGap, verticalGap) <= nearbyDistance;
-    const isSubstantial = component.size >= largest.size * .02;
+    const isIndependentSubject = component.size >= independentSubjectSize;
     if (component !== largest
-      && (component.size < minimumSize || (!isNearby && !isSubstantial))) continue;
+      && (component.size < minimumSize || (!isNearby && !isIndependentSubject))) continue;
     visitComponent(component.seed, output);
   }
   return output;
@@ -208,7 +221,7 @@ function buildAlphaMask(detailed, width, height) {
   const detailedSize = maskSize(detailedSilhouette);
 
   if (detailedSize >= confidentSize
-    && detailedSize <= Math.max(confidentSize * 1.55, confidentSize + pixelCount * .04)) {
+    && detailedSize <= Math.max(confidentSize * 1.9, confidentSize + pixelCount * .08)) {
     silhouette = detailedSilhouette;
   }
 
@@ -324,6 +337,38 @@ async function getSession(modelPath, fallbackModelPath, onProgress) {
   return sessionPromise;
 }
 
+function protectSourceDetails(mask, rgba, width, height) {
+  let protectedMask = Buffer.from(mask);
+  for (let pass = 0; pass < 2; pass += 1) {
+    const next = Buffer.from(protectedMask);
+    for (let y = 1; y < height - 1; y += 1) {
+      for (let x = 1; x < width - 1; x += 1) {
+        const pixel = y * width + x;
+        if (protectedMask[pixel] || rgba[pixel * 4 + 3] < 32) continue;
+        let touchesForeground = false;
+        for (let sampleY = y - 1; sampleY <= y + 1 && !touchesForeground; sampleY += 1) {
+          for (let sampleX = x - 1; sampleX <= x + 1; sampleX += 1) {
+            if (protectedMask[sampleY * width + sampleX]) {
+              touchesForeground = true;
+              break;
+            }
+          }
+        }
+        if (!touchesForeground) continue;
+        const offset = pixel * 4;
+        const red = rgba[offset];
+        const green = rgba[offset + 1];
+        const blue = rgba[offset + 2];
+        const luma = red * .299 + green * .587 + blue * .114;
+        const colorRange = Math.max(red, green, blue) - Math.min(red, green, blue);
+        if (luma <= 125 || colorRange >= 55) next[pixel] = 255;
+      }
+    }
+    protectedMask = next;
+  }
+  return protectedMask;
+}
+
 async function inferFrameMask(session, rgba, width, height) {
   const resized = await sharp(rgba, {
     raw: { width, height, channels: 4 },
@@ -358,9 +403,9 @@ async function inferFrameMask(session, rgba, width, height) {
     .toBuffer();
   const fullSizeMask = Buffer.alloc(width * height);
   for (let pixel = 0; pixel < fullSizeMask.length; pixel += 1) {
-    fullSizeMask[pixel] = resizedMask[pixel] >= 160 && rgba[pixel * 4 + 3] >= 32 ? 255 : 0;
+    fullSizeMask[pixel] = resizedMask[pixel] >= 112 && rgba[pixel * 4 + 3] >= 32 ? 255 : 0;
   }
-  return fullSizeMask;
+  return protectSourceDetails(fullSizeMask, rgba, width, height);
 }
 
 function isInteriorMaskPixel(mask, x, y, width, height) {
@@ -371,6 +416,16 @@ function isInteriorMaskPixel(mask, x, y, width, height) {
     }
   }
   return true;
+}
+
+function shouldPreserveSourceEdgeColor(rgba, pixel) {
+  const offset = pixel * 4;
+  const red = rgba[offset];
+  const green = rgba[offset + 1];
+  const blue = rgba[offset + 2];
+  const luma = red * .299 + green * .587 + blue * .114;
+  const colorRange = Math.max(red, green, blue) - Math.min(red, green, blue);
+  return luma <= 135 || colorRange >= 60;
 }
 
 function applyFrameMask(rgba, fullSizeMask, width, height) {
@@ -404,7 +459,7 @@ function applyFrameMask(rgba, fullSizeMask, width, height) {
           }
         }
       }
-      if (sourcePixel >= 0) {
+      if (sourcePixel >= 0 && !shouldPreserveSourceEdgeColor(rgba, pixel)) {
         const target = pixel * 4;
         const source = sourcePixel * 4;
         output[target] = output[source];
@@ -420,43 +475,12 @@ async function removeFrameBackground(session, rgba, width, height) {
   return applyFrameMask(rgba, await inferFrameMask(session, rgba, width, height), width, height);
 }
 
-function stabilizeGifMask(previous, current, next, width, rgba) {
+function stabilizeGifMask(previous, current, next, rgba) {
   if (!previous || !next) return current;
   const stable = Buffer.from(current);
-  const isolated = new Uint8Array(current.length);
   for (let pixel = 0; pixel < current.length; pixel += 1) {
     if (current[pixel] === 0 && previous[pixel] && next[pixel] && rgba[pixel * 4 + 3] >= 32) {
       stable[pixel] = 255;
-    }
-    else if (current[pixel] && !previous[pixel] && !next[pixel]) isolated[pixel] = 1;
-  }
-
-  const visited = new Uint8Array(current.length);
-  const queue = new Int32Array(current.length);
-  const smallRegionLimit = Math.max(12, Math.round(current.length * .00008));
-  for (let seed = 0; seed < isolated.length; seed += 1) {
-    if (!isolated[seed] || visited[seed]) continue;
-    let head = 0;
-    let tail = 1;
-    queue[0] = seed;
-    visited[seed] = 1;
-    while (head < tail) {
-      const index = queue[head];
-      head += 1;
-      const x = index % width;
-      const add = (value) => {
-        if (value < 0 || value >= isolated.length || !isolated[value] || visited[value]) return;
-        visited[value] = 1;
-        queue[tail] = value;
-        tail += 1;
-      };
-      if (index >= width) add(index - width);
-      if (index < isolated.length - width) add(index + width);
-      if (x > 0) add(index - 1);
-      if (x < width - 1) add(index + 1);
-    }
-    if (tail <= smallRegionLimit) {
-      for (let index = 0; index < tail; index += 1) stable[queue[index]] = 0;
     }
   }
   return stable;
@@ -526,7 +550,7 @@ async function removeAnimatedGif(input, metadata, session, options) {
     if (currentMask) {
       frames.push(applyFrameMask(
         currentFrame,
-        stabilizeGifMask(previousMask, currentMask, nextMask, decoded.info.width, currentFrame),
+        stabilizeGifMask(previousMask, currentMask, nextMask, currentFrame),
         decoded.info.width,
         pageHeight,
       ));
@@ -592,4 +616,12 @@ async function removeBackground(input, options) {
   }).png().toBuffer();
 }
 
-module.exports = { removeBackground };
+module.exports = {
+  removeBackground,
+  _test: {
+    applyFrameMask,
+    keepRelevantComponents,
+    protectSourceDetails,
+    stabilizeGifMask,
+  },
+};

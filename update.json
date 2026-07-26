@@ -1,10 +1,10 @@
 {
-  "tag_name": "v1.1.15",
+  "tag_name": "v1.1.17",
   "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
-  "body": "新增安全的更新下载安装流程；Windows 可校验安装包后自动更新，Mac 会打开官网下载页面。",
+  "body": "角色设定现支持最多 20000 字，可在本地分析剧情、身世、内心、性格、目标、关系、喜好与口癖，生成符合人物设定的气泡、动作专属台词和自动字体；无需联网或额外安装 AI。",
   "windows": {
-    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.15/photo-desktop-pet-1.1.15-Windows-x64.exe",
-    "sha256": "14FBEC88EAA4E7304369E5E23F0C3D06BFBBF7B16316B4178381E1B21FCF26E9",
-    "size": 285332208
+    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.17/photo-desktop-pet-1.1.17-Windows-x64.exe",
+    "sha256": "93EAB3A05E287F24CFD0522BC83862B1AA26AF432CAAE29BF59DC9FCAB6D4990",
+    "size": 285252337
   }
 }

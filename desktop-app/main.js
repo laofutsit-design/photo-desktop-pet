@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, shell, Tray } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -18,6 +18,7 @@ const MAX_FORM_COUNT = 24;
 const MAX_SOURCE_BYTES = 30 * 1024 * 1024;
 const MAX_CUSTOM_PHRASE_COUNT = 50;
 const MAX_CUSTOM_PHRASE_LENGTH = 100;
+const MAX_GROUP_PROFILE_LENGTH = 20000;
 const HIT_MASK_MAX_SIZE = 256;
 const DRAG_EDGE_TRIGGER_PX = 2;
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -28,7 +29,7 @@ const UPDATE_MANIFEST_URL = 'https://laofutsit-design.github.io/photo-desktop-pe
 const UPDATE_API_URL = 'https://api.github.com/repos/laofutsit-design/photo-desktop-pet/releases/latest';
 const UPDATE_RELEASE_BASE_URL = 'https://github.com/laofutsit-design/photo-desktop-pet/releases/download';
 const BUBBLE_FONTS = new Set([
-  'system', 'yahei', 'rounded', 'kaiti', 'songti', 'heiti',
+  'profile', 'yahei', 'rounded', 'kaiti', 'songti', 'heiti',
   'shoujin', 'xingkai', 'lishu', 'fangsong',
 ]);
 const BUBBLE_STYLES = new Set(['glass', 'cream', 'comic', 'neon', 'nebula', 'minimal']);
@@ -51,7 +52,7 @@ let personality = 'calm';
 let customPhrases = [];
 let bubbleColorMode = 'auto';
 let bubbleColor = '#ff9f72';
-let bubbleFont = 'system';
+let bubbleFont = 'profile';
 let bubbleStyle = 'glass';
 let addingPhoto = false;
 let processingPhoto = false;
@@ -265,12 +266,13 @@ function normalizeCustomPhrases(values) {
 }
 
 function normalizeBubbleAppearance(value) {
+  const requestedFont = value?.font === 'system' ? 'profile' : value?.font;
   return {
     colorMode: value?.colorMode === 'custom' ? 'custom' : 'auto',
     color: typeof value?.color === 'string' && /^#[0-9a-f]{6}$/i.test(value.color)
       ? value.color.toLowerCase()
       : '#ff9f72',
-    font: BUBBLE_FONTS.has(value?.font) ? value.font : 'system',
+    font: BUBBLE_FONTS.has(requestedFont) ? requestedFont : 'profile',
     style: BUBBLE_STYLES.has(value?.style) ? value.style : 'glass',
   };
 }
@@ -651,7 +653,8 @@ function hideToTray() {
 async function showPetMenu() {
   if (!petWindow || petWindow.isDestroyed()) return Promise.resolve();
   const manifest = await readManifest();
-  const menuGroups = manifest?.groups || [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME }];
+  const menuGroups = manifest?.groups
+    || [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME, profile: '' }];
   const menuForms = manifest?.forms || (petReady ? [{ groupId: DEFAULT_GROUP_ID }] : []);
   const groupItems = menuGroups.map((group) => ({
     label: group.name,
@@ -864,11 +867,16 @@ function normalizeGroups(values) {
   for (const value of Array.isArray(values) ? values : []) {
     const id = typeof value?.id === 'string' && value.id.trim() ? value.id.trim() : '';
     const name = typeof value?.name === 'string' ? value.name.trim().slice(0, 30) : '';
+    const profile = typeof value?.profile === 'string'
+      ? value.profile.trim().slice(0, MAX_GROUP_PROFILE_LENGTH)
+      : '';
     if (!id || ids.has(id)) continue;
     ids.add(id);
-    groups.push({ id, name: name || `角色 ${groups.length + 1}` });
+    groups.push({ id, name: name || `角色 ${groups.length + 1}`, profile });
   }
-  if (groups.length === 0) groups.push({ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME });
+  if (groups.length === 0) {
+    groups.push({ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME, profile: '' });
+  }
   return groups;
 }
 
@@ -888,7 +896,7 @@ function normalizeManifest(raw) {
       }];
     });
     return {
-      version: 2,
+      version: 3,
       groups,
       forms,
       activeGroupId: groupIds.has(raw.activeGroupId) ? raw.activeGroupId : groups[0].id,
@@ -896,8 +904,8 @@ function normalizeManifest(raw) {
   }
   if (!Array.isArray(raw.files)) return null;
   return {
-    version: 2,
-    groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME }],
+    version: 3,
+    groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME, profile: '' }],
     forms: raw.files
       .filter((file) => typeof file === 'string' && path.basename(file) === file)
       .map((file) => ({ file, groupId: DEFAULT_GROUP_ID, phrases: [] })),
@@ -945,7 +953,7 @@ async function loadSavedForms() {
     return {
       forms: [toDataUrl(await fs.readFile(legacyPetFilePath()))],
       formMetadata: [{ groupId: DEFAULT_GROUP_ID, phrases: [] }],
-      groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME }],
+      groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME, profile: '' }],
       activeGroupId: DEFAULT_GROUP_ID,
       fromLegacy: true,
     };
@@ -954,7 +962,7 @@ async function loadSavedForms() {
     return {
       forms: [],
       formMetadata: [],
-      groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME }],
+      groups: [{ id: DEFAULT_GROUP_ID, name: DEFAULT_GROUP_NAME, profile: '' }],
       activeGroupId: DEFAULT_GROUP_ID,
       fromLegacy: false,
     };
@@ -1039,7 +1047,7 @@ async function saveForms(dataUrls, library = {}) {
         .slice(0, MAX_CUSTOM_PHRASE_COUNT),
     }));
     await fs.writeFile(temporaryManifest, JSON.stringify({
-      version: 2,
+      version: 3,
       groups,
       forms,
       activeGroupId: nextActiveGroupId,
@@ -1411,7 +1419,7 @@ ipcMain.handle('manager:create-group', async () => {
     if (manifest.groups.length >= 12) throw new Error('最多创建 12 个角色分组');
     const id = crypto.randomUUID();
     createdGroupId = id;
-    manifest.groups.push({ id, name: `角色 ${manifest.groups.length + 1}` });
+    manifest.groups.push({ id, name: `角色 ${manifest.groups.length + 1}`, profile: '' });
   });
   sendLibraryMetadataToPet(saved);
   return { ...saved, selectedGroupId: createdGroupId };
@@ -1424,6 +1432,20 @@ ipcMain.handle('manager:rename-group', async (_event, groupId, name) => {
     const group = manifest.groups.find((item) => item.id === groupId);
     if (!group) throw new Error('角色分组已经不存在');
     group.name = nextName;
+  });
+  sendLibraryMetadataToPet(saved);
+  return saved;
+});
+
+ipcMain.handle('manager:set-group-profile', async (_event, groupId, value) => {
+  const profile = typeof value === 'string' ? value.trim() : '';
+  if (profile.length > MAX_GROUP_PROFILE_LENGTH) {
+    throw new Error(`角色设定不能超过 ${MAX_GROUP_PROFILE_LENGTH} 个字符`);
+  }
+  const saved = await updateManifestMetadata((manifest) => {
+    const group = manifest.groups.find((item) => item.id === groupId);
+    if (!group) throw new Error('角色分组已经不存在');
+    group.profile = profile;
   });
   sendLibraryMetadataToPet(saved);
   return saved;
