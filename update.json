@@ -1,10 +1,10 @@
 {
-  "tag_name": "v1.2.1",
+  "tag_name": "v1.2.2",
   "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
-  "body": "整合原计划 1.1.21 的全部更新并将正式版本号升级为 1.2.1；继续改进角色设定解析、气泡与动作表现，并优化自动更新安装流程。",
+  "body": "修复软件内更新：安装包改为下载到系统临时目录；旧程序退出后自动卸载旧版本，再安装并校验新版本；照片、角色和设置会保留。",
   "windows": {
-    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.2.1/photo-desktop-pet-1.2.1-Windows-x64.exe",
-    "sha256": "CC05CC93D49A810E39DCD3FBE62A1566E3EBB72AE55D3443A8BEF61201ECC89B",
-    "size": 125082491
+    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.2.2/photo-desktop-pet-1.2.2-Windows-x64.exe",
+    "sha256": "7D2F05FE648977E756F17D9B7976C648B1668084A368A9C555506B8DC7F6A5C3",
+    "size": 125083393
   }
 }
