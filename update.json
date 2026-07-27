@@ -4,7 +4,7 @@
   "body": "整合原计划 1.1.21 的全部更新并将正式版本号升级为 1.2.1；继续改进角色设定解析、气泡与动作表现，并优化自动更新安装流程。",
   "windows": {
     "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.2.1/photo-desktop-pet-1.2.1-Windows-x64.exe",
-    "sha256": "9898B1EB193B12AA1F0BF1C13BEA294D835A4136A31397FBAE9E2A40E1D9F112",
-    "size": 286096435
+    "sha256": "CC05CC93D49A810E39DCD3FBE62A1566E3EBB72AE55D3443A8BEF61201ECC89B",
+    "size": 125082491
   }
 }
