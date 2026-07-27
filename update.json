@@ -1,10 +1,10 @@
 {
-  "tag_name": "v1.1.19",
+  "tag_name": "v1.1.20",
   "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
-  "body": "改进角色设定气泡解析：识别中英文引号、问号、感叹号、省略号、冒号与列表标题，保留台词原有标点；过滤剧情旁白、说话风格说明、网址、身高生日等元数据和残缺片段，同时继续根据身份、内心、目标与喜恶生成自然的第一人称气泡。",
+  "body": "修复自动更新覆盖失败：更新包会安装到当前程序目录并替换原版本；下载时显示实时百分比，安装时显示等待、替换、验证和重新启动进度。安装完成后会核对程序版本，确认正确后才启动新版。",
   "windows": {
-    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.19/photo-desktop-pet-1.1.19-Windows-x64.exe",
-    "sha256": "7FBC6FE58E72C0329797D9366F78D04B8E3202E851082A406BCDB6D7393A6764",
-    "size": 286020398
+    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.20/photo-desktop-pet-1.1.20-Windows-x64.exe",
+    "sha256": "BC65B683B2AB83FC636885F73625D3CD508ECF41672C059A825DFDAE68350EDF",
+    "size": 125079982
   }
 }
