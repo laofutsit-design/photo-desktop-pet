@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, shell, Tray } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -680,18 +680,26 @@ async function checkForUpdates({ force = false } = {}) {
       return;
     }
 
+    const canAutoInstall = process.platform === 'win32';
+    const actionDetail = canAutoInstall
+      ? '确认后将自动下载、安装并重新打开；照片和设置会保留。'
+      : '确认后将打开官网下载页面，请选择适合当前 Mac 的安装包。';
     const result = await dialog.showMessageBox(petWindow, {
       type: 'info',
-      buttons: ['下载并自动安装', '以后再说'],
+      buttons: [canAutoInstall ? '下载并自动安装' : '打开下载页面', '以后再说'],
       defaultId: 0,
       cancelId: 1,
       title: '照片桌宠有新版本',
       message: `发现新版本 v${latestVersion}`,
       detail: typeof release.body === 'string' && release.body.trim()
-        ? `${release.body.trim().slice(0, 420)}\n\n确认后将自动下载、安装并重新打开；照片和设置会保留。`
-        : '确认后将自动下载、安装并重新打开；照片和设置会保留。',
+        ? `${release.body.trim().slice(0, 420)}\n\n${actionDetail}`
+        : actionDetail,
     });
     if (result.response !== 0) return;
+    if (!canAutoInstall) {
+      await shell.openExternal(release.html_url || UPDATE_WEBSITE_URL);
+      return;
+    }
 
     updateRequested = true;
     sendUpdateStatus('正在准备更新…', {

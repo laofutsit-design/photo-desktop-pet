@@ -35,7 +35,7 @@ let managerDrag;
 let nextManagerDragId = 0;
 
 function updateProfileInfo() {
-  groupProfileInfo.textContent = `${groupProfile.value.length}/20000 字 · 本地分析标点、台词、内心和目标，生成符合设定的动作、气泡与字体。`;
+  groupProfileInfo.textContent = `${groupProfile.value.length}/20000 字 · 本地分析剧情、性格、日常口语、自称、称呼和口癖，生成符合设定的动作、气泡与字体。`;
 }
 
 function applyState(state, keepSelection = true) {

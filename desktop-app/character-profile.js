@@ -26,7 +26,7 @@
         '语气', '说话方式', '语言风格', '自称', '称呼',
       ],
     },
-    { key: 'likes', labels: ['喜欢', '爱好', '偏好', '习惯'] },
+    { key: 'likes', labels: ['喜欢', '喜好', '爱好', '偏好', '习惯'] },
     { key: 'dislikes', labels: ['讨厌', '厌恶', '害怕', '恐惧', '弱点', '雷区'] },
   ];
 
@@ -182,6 +182,22 @@
     { font: 'kaiti', keywords: ['楷体', '学者', '书生', '文静', '温柔', '沉稳', '治愈', '儒雅'] },
     { font: 'yahei', keywords: ['雅黑', '现代', '都市', '干练', '直接'] },
   ];
+
+  const DAILY_TRAIT_PHRASES = {
+    energetic: ['今天想做点什么？', '走，一起活动一下！'],
+    gentle: ['累了就告诉我。', '今天也别太勉强自己。'],
+    tsundere: ['哼，我才没有一直等你。', '有事就说，别磨蹭。'],
+    foodie: ['今天想吃点什么？', '到点了，该找点吃的了。'],
+    sleepy: ['唔……再眯一会儿。', '今天也想早点睡。'],
+    sensitive: ['你别突然吓我。', '能再陪我一会儿吗？'],
+    elegant: ['今天也要从容一些。', '需要我陪你坐一会儿吗？'],
+    clumsy: ['刚才那一下不算。', '这次我会看好脚下的。'],
+    winged: ['今天的风很舒服。', '想和我去吹吹风吗？'],
+    brave: ['别担心，有我在。', '遇到麻烦就一起解决。'],
+    reserved: ['嗯，我在听。', '有事直说就好。'],
+    scholarly: ['要一起看会儿书吗？', '让我再想一会儿。'],
+    mischievous: ['猜猜我刚才在做什么？', '嘿，差一点就被你发现了。'],
+  };
 
   function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -390,6 +406,60 @@
     return '我';
   }
 
+  function cleanHabitToken(value) {
+    return String(value || '')
+      .trim()
+      .replace(/^[“「『‘"'《〈【（(]+|[”」』’"'》〉】）)，,。！？!?；;：:\s]+$/g, '')
+      .trim();
+  }
+
+  function extractUserAddress(profile) {
+    const patterns = [
+      /(?:称呼用户|称呼玩家|称呼对方|对用户的称呼|对玩家的称呼|对对方的称呼)\s*(?:为|是|叫作?|用)?\s*[：:]?\s*[“「『‘"']?([\u3400-\u9fffA-Za-z][\u3400-\u9fffA-Za-z0-9·_-]{0,9})/,
+      /(?:^|[\n；;。])\s*称呼\s*[：:]\s*[“「『‘"']?([\u3400-\u9fffA-Za-z][\u3400-\u9fffA-Za-z0-9·_-]{0,9})/m,
+    ];
+    for (const pattern of patterns) {
+      const candidate = cleanHabitToken(profile.match(pattern)?.[1]);
+      if (candidate && !['用户', '玩家', '对方', '别人', '角色'].includes(candidate)) return candidate;
+    }
+    return '';
+  }
+
+  function extractSentenceEnding(profile) {
+    const patterns = [
+      /(?:句尾|句末|每句话结尾|每句结尾)\s*(?:会|都|要|习惯)?\s*(?:加上?|带上?|用|说|是)?\s*[：:]?\s*[“「『‘"']?([\u3400-\u9fffA-Za-z]{1,4})/,
+      /(?:每句话|每句)\s*(?:都)?\s*(?:以|用)\s*[“「『‘"']?([\u3400-\u9fffA-Za-z]{1,4})[”」』’"']?\s*(?:结尾|收尾)/,
+    ];
+    for (const pattern of patterns) {
+      const candidate = cleanHabitToken(profile.match(pattern)?.[1]);
+      if (candidate && !/语气|标点|句号|问号|感叹/.test(candidate)) return candidate;
+    }
+    return '';
+  }
+
+  function analyzeSpeechHabits(profile, sections, selfReference) {
+    const speechCorpus = `${sections.speech.join(' ')} ${profile}`;
+    const interjections = ['嗯', '唔', '哼', '嘿嘿', '欸', '诶', '喂', '哎呀', '那个']
+      .filter((word) => speechCorpus.includes(word))
+      .slice(0, 3);
+    const archaic = /古风|古雅|文言|江湖口吻|在下|吾|本王|本宫|朕/.test(speechCorpus);
+    const polite = /敬语|礼貌|客气|正式|尊称|使用“?您|使用「您/.test(speechCorpus);
+    const casual = /日常口语|口语化|随意|自然口吻|朋友般|接地气/.test(speechCorpus);
+    return {
+      selfReference,
+      address: extractUserAddress(profile),
+      endingParticle: extractSentenceEnding(profile),
+      interjections,
+      register: archaic ? 'archaic' : (polite ? 'polite' : (casual ? 'casual' : 'neutral')),
+      short: /句(?:子|式).{0,6}(?:简短|短)|少言|寡言|言简意赅|惜字如金|少说废话/.test(speechCorpus),
+      gentle: /温柔|轻柔|柔和|体贴|治愈/.test(speechCorpus),
+      lively: /活泼|元气|俏皮|轻快|开朗|话多/.test(speechCorpus),
+      cute: /可爱|软萌|撒娇|甜美|奶声|孩子气/.test(speechCorpus),
+      tsundere: /傲娇|嘴硬|口是心非|别扭/.test(speechCorpus),
+      reserved: /高冷|冷淡|冷静|克制|寡言|沉稳|简短|直接/.test(speechCorpus),
+    };
+  }
+
   const WRAPPING_QUOTES = new Map([
     ['“', '”'],
     ['「', '」'],
@@ -435,6 +505,78 @@
     if (/(?:喜欢|讨厌|害怕|希望|想要|来自|出生|把|将|但是|因为|所以|以及|和|与)[。！？!?]$/.test(phrase)) return '';
     if (phrase.length > MAX_PHRASE_LENGTH) return '';
     return phrase;
+  }
+
+  function applySpeechHabits(value, habits, index = 0, everyday = false) {
+    let phrase = String(value || '').trim();
+    if (!phrase) return '';
+
+    if (habits.selfReference && habits.selfReference !== '我') {
+      phrase = phrase.replace(/我(?!们)/g, habits.selfReference);
+    }
+    const addressee = habits.address || (habits.register === 'polite' ? '您' : '你');
+    if (addressee !== '你') phrase = phrase.replace(/你(?!们)/g, addressee);
+
+    if (habits.register === 'archaic') {
+      phrase = phrase
+        .replace(/今天/g, '今日')
+        .replace(/一起/g, '一同')
+        .replace(/休息/g, '歇息')
+        .replace(/吧(?=[。！？!?]|$)/g, '罢')
+        .replace(/[啦呀嘛](?=[。！？!?]|$)/g, '罢');
+    }
+
+    if (everyday && habits.interjections.length > 0 && index % 4 === 1) {
+      const interjection = habits.interjections[index % habits.interjections.length];
+      if (!phrase.startsWith(interjection)) phrase = `${interjection}，${phrase}`;
+    }
+    if (everyday && habits.tsundere && index % 5 === 0 && !/^哼[，,]/.test(phrase)) {
+      phrase = `哼，${phrase}`;
+    }
+
+    if (habits.endingParticle) {
+      const punctuation = phrase.match(/[。！？!?…～~.]$/)?.[0] || '。';
+      phrase = phrase.replace(/[。！？!?…～~.]+$/, '');
+      phrase = phrase.replace(/[呀啦呢嘛哟哦咯哒罢]+$/, '');
+      if (!phrase.endsWith(habits.endingParticle)) phrase += habits.endingParticle;
+      phrase += punctuation;
+    }
+    return completeBubbleText(phrase);
+  }
+
+  function everydaySpeechPhrases(habits, matchedRules) {
+    const baseByRegister = {
+      neutral: [
+        '你今天过得怎么样？', '有事就跟我说。', '累了就歇一会儿吧。',
+        '我会在这儿陪你。', '刚才在忙什么？', '别忘了喝点水。',
+      ],
+      casual: [
+        '你今天过得咋样？', '有啥事就跟我说。', '累了就歇会儿吧。',
+        '我就在这儿呢。', '刚忙啥呢？', '走，放松一下。',
+      ],
+      polite: [
+        '您今天过得还好吗？', '有什么需要，请告诉我。', '累了的话，请先休息一下。',
+        '我会在这里陪着您。', '今天也辛苦了。', '请记得照顾好自己。',
+      ],
+      archaic: [
+        '你今日可还安好？', '若有烦心事，便同我说罢。', '莫要太过劳累。',
+        '我一直在此。', '得闲时，陪我坐一会儿罢。', '今日想做些什么？',
+      ],
+    };
+    const tonePhrases = [];
+    if (habits.gentle) tonePhrases.push('慢慢来，我听着呢。', '别勉强自己，好吗？');
+    if (habits.lively) tonePhrases.push('嘿，今天也打起精神来！', '走吧，我们动起来！');
+    if (habits.cute) tonePhrases.push('再陪我一会儿嘛。', '摸摸我，心情会变好哦。');
+    if (habits.reserved) tonePhrases.push('嗯，我在听。', '有事直说就好。');
+    const traitPhrases = matchedRules.flatMap((rule) => DAILY_TRAIT_PHRASES[rule.id] || []);
+    return unique([
+      ...(baseByRegister[habits.register] || baseByRegister.neutral),
+      ...tonePhrases,
+      ...traitPhrases,
+    ])
+      .map((phrase, index) => applySpeechHabits(phrase, habits, index, true))
+      .filter(Boolean)
+      .slice(0, 16);
   }
 
   function leadingSelfReference(value, name, selfReference) {
@@ -516,17 +658,18 @@
   function quotedSpeech(sections) {
     const phrases = [];
     for (const fact of sections.speech) {
-      const quotes = extractQuotedText(fact);
-      if (quotes.length > 0) {
-        phrases.push(...quotes);
-        continue;
-      }
       const spokenClause = fact.match(/(?:会说|常说|总会说|说的是)\s*[：:]\s*(.+)$/)?.[1];
       if (spokenClause) {
         phrases.push(spokenClause);
         continue;
       }
-      if (!SPEECH_DESCRIPTION.test(fact)) phrases.push(fact);
+      if (SPEECH_DESCRIPTION.test(fact)) continue;
+      const quotes = extractQuotedText(fact);
+      if (quotes.length > 0) {
+        phrases.push(...quotes);
+        continue;
+      }
+      phrases.push(fact);
     }
     return phrases;
   }
@@ -560,11 +703,14 @@
     return selected.font;
   }
 
-  function mergeActionPhrases(rules) {
+  function mergeActionPhrases(rules, speechHabits) {
     const result = {};
     for (const rule of rules) {
       for (const [action, phrases] of Object.entries(rule.actionPhrases)) {
-        result[action] = unique([...(result[action] || []), ...phrases]);
+        const styled = phrases
+          .map((phrase, index) => applySpeechHabits(phrase, speechHabits, index, true))
+          .filter(Boolean);
+        result[action] = unique([...(result[action] || []), ...styled]);
       }
     }
     return result;
@@ -581,6 +727,10 @@
         actionPhrases: {},
         font: 'system',
         traits: [],
+        speechHabits: {
+          selfReference: '我', address: '', endingParticle: '', interjections: [],
+          register: 'neutral', short: false,
+        },
         sections: {},
       };
     }
@@ -605,33 +755,33 @@
       .slice(0, 4);
     const matchedRules = rankedTraits.map(({ rule }) => rule);
     const selfReference = extractSelfReference(normalized);
+    const speechHabits = analyzeSpeechHabits(normalized, sections, selfReference);
+    const styleFacts = (values, kind, limit) => values.slice(0, limit)
+      .map((fact) => firstPersonFact(fact, name, selfReference, kind))
+      .map((phrase, index) => applySpeechHabits(phrase, speechHabits, index))
+      .filter(Boolean);
 
     const phrases = unique([
       ...quotedSpeech(sections).slice(0, 8)
         .map((fact) => firstPersonFact(fact, name, selfReference, 'speech')),
-      ...sections.inner.slice(0, 5)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'inner')),
-      ...sections.goal.slice(0, 4)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'goal')),
-      ...sections.story.slice(0, 5)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'story')),
-      ...sections.relationship.slice(0, 4)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'relationship')),
-      ...sections.likes.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'likes')),
-      ...sections.dislikes.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'dislikes')),
-      ...sections.identity.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference, 'identity')),
-      ...matchedRules.flatMap((rule) => rule.phrases),
+      ...everydaySpeechPhrases(speechHabits, matchedRules),
+      ...styleFacts(sections.inner, 'inner', 5),
+      ...styleFacts(sections.goal, 'goal', 4),
+      ...styleFacts(sections.story, 'story', 5),
+      ...styleFacts(sections.relationship, 'relationship', 4),
+      ...styleFacts(sections.likes, 'likes', 3),
+      ...styleFacts(sections.dislikes, 'dislikes', 3),
+      ...styleFacts(sections.identity, 'identity', 3),
+      ...matchedRules.flatMap((rule) => rule.phrases)
+        .map((phrase, index) => applySpeechHabits(phrase, speechHabits, index, true)),
     ]).slice(0, 40);
 
     if (phrases.length === 0) {
-      phrases.push(
+      phrases.push(...[
         `${name}会按照自己的方式陪着你。`,
         '你写下的设定，我都有好好记住。',
         `今天也让${name}陪着你吧。`,
-      );
+      ].map((phrase, index) => applySpeechHabits(phrase, speechHabits, index, true)));
     }
 
     return {
@@ -643,9 +793,10 @@
         ? unique(matchedRules.flatMap((rule) => rule.idleActions))
         : [...DEFAULT_BEHAVIOR.idleActions],
       specialActions: unique(matchedRules.flatMap((rule) => rule.specialActions)),
-      actionPhrases: mergeActionPhrases(matchedRules),
+      actionPhrases: mergeActionPhrases(matchedRules, speechHabits),
       font: chooseFont(normalized),
       traits: rankedTraits.map(({ rule }) => rule.id),
+      speechHabits,
       sections,
     };
   }
