@@ -1,4 +1,4 @@
-name: Build macOS DMG
+name: Build release assets
 
 on:
   push:
@@ -17,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: macos-15-intel
+    outputs:
+      release_tag: ${{ steps.release.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -164,3 +166,69 @@ jobs:
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "Photo Desktop Pet $RELEASE_TAG"
           fi
           gh release upload "$RELEASE_TAG" desktop-app/dist/*.dmg desktop-app/dist/*.dmg.sha256.txt --clobber
+
+  build-windows:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: desktop-app/package-lock.json
+      - name: Install dependencies
+        working-directory: desktop-app
+        run: npm ci --include=optional
+      - name: Verify app source
+        working-directory: desktop-app
+        run: npm run verify
+      - name: Verify sharp in Electron runtime
+        working-directory: desktop-app
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: npm run verify:electron-runtime
+      - name: Build Windows installer
+        working-directory: desktop-app
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run dist:win
+      - name: Verify Windows installer
+        working-directory: desktop-app
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        run: |
+          $packageVersion = node -p "require('./package.json').version"
+          if ($env:RELEASE_TAG -ne "v$packageVersion") {
+            throw "Release tag $env:RELEASE_TAG does not match app version v$packageVersion."
+          }
+
+          $installer = Get-ChildItem -LiteralPath dist -Filter '*.exe' -File |
+            Where-Object Name -eq "photo-desktop-pet-$packageVersion-Windows-x64.exe" |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw 'Windows installer was not found.'
+          }
+
+          $installerVersion = $installer.VersionInfo.ProductVersion
+          if (-not $installerVersion.StartsWith($packageVersion)) {
+            throw "Installer version $installerVersion does not match package version $packageVersion."
+          }
+
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash
+          Set-Content -LiteralPath "$($installer.FullName).sha256.txt" -Encoding ascii -Value $hash
+      - name: Upload to GitHub Release
+        working-directory: desktop-app
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist -Filter '*.exe' -File |
+            Where-Object Name -eq "photo-desktop-pet-$($env:RELEASE_TAG.TrimStart('v'))-Windows-x64.exe" |
+            Select-Object -First 1
+          if (-not $installer) {
+            throw 'Windows installer was not found.'
+          }
+          gh release upload $env:RELEASE_TAG $installer.FullName "$($installer.FullName).sha256.txt" --clobber

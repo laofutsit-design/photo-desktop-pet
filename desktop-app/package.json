@@ -7,7 +7,8 @@
   "scripts": {
     "verify": "node scripts/verify-app.js .",
     "verify:electron-runtime": "electron -e \"require('sharp'); console.log('sharp runtime ok:', process.versions.node)\"",
-    "dist:mac": "electron-builder --mac dmg --x64 --publish never"
+    "dist:mac": "electron-builder --mac dmg --x64 --publish never",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
     "onnxruntime-node": "1.17.3",
@@ -25,6 +26,7 @@
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-darwin-x64/**/*",
       "node_modules/@img/sharp-libvips-darwin-x64/**/*",
+      "node_modules/@img/sharp-win32-x64/**/*",
       "node_modules/onnxruntime-node/**/*"
     ],
     "files": [
@@ -44,6 +46,27 @@
         }
       ],
       "identity": null
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "executableName": "照片桌宠",
+      "artifactName": "photo-desktop-pet-${version}-Windows-${arch}.${ext}",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "照片桌宠"
     },
     "dmg": {
       "icon": "assets/icon.icns"
