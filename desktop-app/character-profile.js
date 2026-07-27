@@ -19,7 +19,13 @@
     { key: 'inner', labels: ['内心', '内心活动', '真实想法', '心理', '心境', '秘密', '矛盾'] },
     { key: 'goal', labels: ['目标', '愿望', '梦想', '执念', '使命', '动机', '追求'] },
     { key: 'relationship', labels: ['关系', '人际关系', '家人', '伙伴', '羁绊', '重要的人'] },
-    { key: 'speech', labels: ['口癖', '语气', '说话方式', '语言风格', '自称', '称呼'] },
+    {
+      key: 'speech',
+      labels: [
+        '口癖', '常说', '总会说', '说话时会', '代表台词', '招牌台词', '台词', '对白', '座右铭',
+        '语气', '说话方式', '语言风格', '自称', '称呼',
+      ],
+    },
     { key: 'likes', labels: ['喜欢', '爱好', '偏好', '习惯'] },
     { key: 'dislikes', labels: ['讨厌', '厌恶', '害怕', '恐惧', '弱点', '雷区'] },
   ];
@@ -185,26 +191,150 @@
     return [...new Set(values.filter(Boolean))];
   }
 
+  const OPEN_QUOTES = new Map([
+    ['“', '”'],
+    ['「', '」'],
+    ['『', '』'],
+    ['‘', '’'],
+  ]);
+
+  function isAsciiWordCharacter(value) {
+    return Boolean(value) && /[A-Za-z0-9]/.test(value);
+  }
+
+  function quoteProtectedPositions(text) {
+    const protectedPositions = new Uint8Array(text.length);
+    const quoteStack = [];
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      const expectedClose = quoteStack.at(-1);
+      if (character === '\n') {
+        quoteStack.length = 0;
+        continue;
+      }
+      if ((character === '"' || character === "'") && expectedClose === character) {
+        protectedPositions[index] = 1;
+        quoteStack.pop();
+        continue;
+      }
+      const straightQuote = character === '"' || (
+        character === "'"
+        && !(isAsciiWordCharacter(text[index - 1]) && isAsciiWordCharacter(text[index + 1]))
+      );
+      if (straightQuote) {
+        protectedPositions[index] = 1;
+        quoteStack.push(character);
+        continue;
+      }
+      if (OPEN_QUOTES.has(character)) {
+        protectedPositions[index] = 1;
+        quoteStack.push(OPEN_QUOTES.get(character));
+        continue;
+      }
+      if (character === expectedClose) {
+        protectedPositions[index] = 1;
+        quoteStack.pop();
+        continue;
+      }
+      if (quoteStack.length > 0) protectedPositions[index] = 1;
+    }
+    return protectedPositions;
+  }
+
   function splitFacts(value) {
-    return String(value || '')
+    const text = String(value || '')
       .replace(/\r/g, '\n')
-      .replace(/[•●▪◆◇■□★☆]\s*/g, '\n')
-      .split(/[\n。！？!?；;]+/)
-      .flatMap((part) => (
-        part.length > 90 ? part.split(/[，,](?=.{12,})/) : [part]
-      ))
-      .map((part) => part.trim().replace(/^[-—–·\d.)、\s]+/, ''))
-      .filter((part) => part.length >= 2);
+      .replace(/[•●▪◆◇■□★☆]\s*/g, '\n');
+    const facts = [];
+    const quoteStack = [];
+    let buffer = '';
+
+    const flush = () => {
+      const fact = buffer.trim();
+      if (fact) facts.push(fact);
+      buffer = '';
+    };
+
+    for (let index = 0; index < text.length; index += 1) {
+      const character = text[index];
+      const expectedClose = quoteStack.at(-1);
+
+      if (character === '\n') {
+        flush();
+        quoteStack.length = 0;
+        continue;
+      }
+      if ((character === '"' || character === "'") && expectedClose === character) {
+        quoteStack.pop();
+        buffer += character;
+        continue;
+      }
+      const straightQuote = character === '"' || (
+        character === "'"
+        && !(isAsciiWordCharacter(text[index - 1]) && isAsciiWordCharacter(text[index + 1]))
+      );
+      if (straightQuote) {
+        quoteStack.push(character);
+        buffer += character;
+        continue;
+      }
+      if (OPEN_QUOTES.has(character)) {
+        quoteStack.push(OPEN_QUOTES.get(character));
+        buffer += character;
+        continue;
+      }
+      if (character === expectedClose) {
+        quoteStack.pop();
+        buffer += character;
+        continue;
+      }
+      if (quoteStack.length === 0 && /[；;]/.test(character)) {
+        flush();
+        continue;
+      }
+
+      buffer += character;
+      if (quoteStack.length > 0) continue;
+
+      const urlTail = /https?:\/\/\S*$/i.test(buffer);
+      if (/[。！？!?]/.test(character) && !urlTail) {
+        flush();
+        continue;
+      }
+      if (character === '.' && !urlTail) {
+        const next = text[index + 1] || '';
+        if (!next || /\s/.test(next)) flush();
+      }
+    }
+    flush();
+
+    return facts
+      .map((part) => part.trim().replace(/^(?:[-—–·]\s*|\d{1,3}[.)、]\s*)/, ''))
+      .filter((part) => part.length >= 1);
   }
 
   function classifyFact(value) {
     return CLASSIFIERS.find((entry) => entry[1].test(value))?.[0];
   }
 
+  function validSectionMarkerBoundary(profile, index) {
+    let cursor = index - 1;
+    while (cursor >= 0 && /[ \t]/.test(profile[cursor])) cursor -= 1;
+    if (cursor < 0 || /[\n。！？!?；;，,”」』]/.test(profile[cursor])) return true;
+    const lineStart = profile.lastIndexOf('\n', index - 1) + 1;
+    const prefix = profile.slice(lineStart, index).trim();
+    return /^(?:[-—–·•●▪◆◇■□★☆]|\d{1,3}[.)、])$/.test(prefix);
+  }
+
   function parseProfile(profile) {
     const sections = Object.fromEntries(SECTION_DEFINITIONS.map(({ key }) => [key, []]));
     const markerPattern = new RegExp(`(${LABEL_PATTERN})\\s*[：:]`, 'g');
-    const markers = [...profile.matchAll(markerPattern)];
+    const protectedPositions = quoteProtectedPositions(profile);
+    const markers = [...profile.matchAll(markerPattern)]
+      .filter((match) => (
+        !protectedPositions[match.index]
+        && validSectionMarkerBoundary(profile, match.index)
+      ));
     const unlabeled = [];
 
     if (markers.length === 0) {
@@ -219,7 +349,9 @@
         for (const fact of splitFacts(profile.slice(start, end))) {
           sections[key].push(fact);
           const inferred = classifyFact(fact);
-          if (inferred && inferred !== key) sections[inferred].push(fact);
+          if (inferred && inferred !== key && inferred !== 'speech' && key !== 'speech') {
+            sections[inferred].push(fact);
+          }
         }
       }
     }
@@ -258,49 +390,145 @@
     return '我';
   }
 
-  function firstPersonFact(value, name, selfReference, prefix = '') {
-    let phrase = String(value || '')
-      .replace(/^[^：:\n]{1,12}[：:]\s*/, '')
+  const WRAPPING_QUOTES = new Map([
+    ['“', '”'],
+    ['「', '」'],
+    ['『', '』'],
+    ['‘', '’'],
+    ['"', '"'],
+    ["'", "'"],
+  ]);
+  const METADATA_PREFIX = /^(?:姓名|年龄|生日|身高|体重|性别|种族|职业|阵营|外貌|发色|瞳色|武器|属性|标签|关键词|备注|主页|链接|网址|CV|声优|出处)\s*[：:]/i;
+  const STATIC_ATTRIBUTE_PREFIX = /^(?:姓名|年龄|生日|身高|体重|性别|外貌|发色|瞳色|武器|血型|星座|三围|属性|标签|关键词|CV|声优|出处)/i;
+  const SPEECH_DESCRIPTION = /(?:语气|语调|语速|声线|语言风格|说话方式|句子简短|用词|措辞|敬语|自称|称呼|口音|古风|现代口语|冷静|克制|温柔|活泼|简短|直接|平静|冷淡|礼貌)/;
+  const NARRATIVE_OPENING = /^(?:第[一二三四五六七八九十百\d]+[章节幕]|场景|镜头|旁白|画面|月光|阳光|夜幕|清晨|黄昏|随后|此时|与此同时|故事开始|剧情)/;
+
+  function extractQuotedText(value) {
+    const phrases = [];
+    const pattern = /“([^”\n]{1,100})”|「([^」\n]{1,100})」|『([^』\n]{1,100})』|‘([^’\n]{1,100})’|"([^"\n]{1,100})"|'([^'\n]{1,100})'/g;
+    for (const match of String(value || '').matchAll(pattern)) {
+      phrases.push(match.slice(1).find((candidate) => candidate !== undefined));
+    }
+    return phrases;
+  }
+
+  function stripWrappingQuotes(value) {
+    let phrase = String(value || '').trim();
+    while (phrase.length >= 2) {
+      const expectedClose = WRAPPING_QUOTES.get(phrase[0]);
+      if (!expectedClose || phrase.at(-1) !== expectedClose) break;
+      phrase = phrase.slice(1, -1).trim();
+    }
+    return phrase;
+  }
+
+  function completeBubbleText(value, explicitSpeech = false) {
+    let phrase = stripWrappingQuotes(value)
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!phrase || /https?:\/\/|www\.|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/i.test(phrase)) return '';
+    if (!explicitSpeech && METADATA_PREFIX.test(phrase)) return '';
+    if (/^[“「『"]|[”」』"]$/.test(phrase)) return '';
+    if (/[,，、:：—–-]$/.test(phrase)) return '';
+    phrase = phrase.replace(/[；;]+$/g, '。');
+    if (!/[。！？!?…～~.]$/.test(phrase)) phrase = `${phrase}。`;
+    if (/(?:喜欢|讨厌|害怕|希望|想要|来自|出生|把|将|但是|因为|所以|以及|和|与)[。！？!?]$/.test(phrase)) return '';
+    if (phrase.length > MAX_PHRASE_LENGTH) return '';
+    return phrase;
+  }
+
+  function leadingSelfReference(value, name, selfReference) {
+    let phrase = value;
+    if (name) {
+      phrase = phrase.replace(
+        new RegExp(`^${escapeRegExp(name)}(?=的|是|为|在|曾|将|要|想|喜|讨|害|担|决|发|来|去|把|被)`),
+        selfReference,
+      );
+    }
+    phrase = phrase
+      .replace(/^(?:她|他|它|该角色|这个角色|角色本人|主人公|主角)的/, `${selfReference}的`)
+      .replace(/^(?:她|他|它|该角色|这个角色|角色本人|主人公|主角)(?=是|为|在|曾|将|要|想|喜|讨|害|担|决|发|来|去|把|被|其)/, selfReference)
+      .replace(/用户/g, '你');
+    return phrase;
+  }
+
+  function personalStoryFact(value, name) {
+    const phrase = stripWrappingQuotes(value).trim();
+    if (!phrase || NARRATIVE_OPENING.test(phrase) || /https?:\/\//i.test(phrase)) return false;
+    const namePattern = name ? `${escapeRegExp(name)}|` : '';
+    return new RegExp(
+      `^(?:${namePattern}我|她|他|该角色|这个角色|出生|来自|曾经|自幼|小时候|幼年|从小|故乡|家族|失去|遭遇|独自|被迫|逃离)`,
+    ).test(phrase);
+  }
+
+  function personalRelationshipFact(value, name) {
+    const phrase = stripWrappingQuotes(value).trim();
+    if (!phrase || /[“”「」『』"']/.test(phrase)) return false;
+    const namePattern = name ? `${escapeRegExp(name)}|` : '';
+    return new RegExp(
+      `^(?:${namePattern}我|她|他|该角色|这个角色|把|将|和|与)`,
+    ).test(phrase);
+  }
+
+  function firstPersonFact(value, name, selfReference, kind = 'fact') {
+    let phrase = stripWrappingQuotes(value)
       .replace(/\s+/g, ' ')
       .trim();
     if (!phrase) return '';
-
-    if (name) {
-      phrase = phrase.replace(new RegExp(escapeRegExp(name), 'g'), selfReference);
+    if (kind === 'speech') {
+      if (name) {
+        phrase = phrase.replace(new RegExp(`^${escapeRegExp(name)}\\s*[：:]\\s*`), '');
+      }
+      return completeBubbleText(phrase, true);
     }
-    phrase = phrase
-      .replace(/(?:她|他|它|该角色|这个角色|角色本人)的/g, `${selfReference}的`)
-      .replace(/(?:她|他|它|该角色|这个角色|主人公|主角)/g, selfReference)
-      .replace(/用户/g, '你')
-      .replace(new RegExp(`^${escapeRegExp(selfReference)}(?:是|为)(?=身为|作为)`), selfReference)
-      .replace(/[。！？!?；;]+$/g, '');
-    if (!phrase.includes(selfReference) && /^(?:出生|来自|曾经|自幼|小时候|希望|想要|渴望|害怕|喜欢|讨厌|担心|决定|发誓)/.test(phrase)) {
+    if (METADATA_PREFIX.test(phrase) || /https?:\/\/|www\./i.test(phrase)) return '';
+    if (kind === 'identity' && STATIC_ATTRIBUTE_PREFIX.test(phrase)) return '';
+    if (kind === 'story' && !personalStoryFact(phrase, name)) return '';
+    if (kind === 'relationship' && (
+      /—{2,}|[-=]>/i.test(phrase)
+      || !personalRelationshipFact(phrase, name)
+    )) return '';
+
+    phrase = leadingSelfReference(phrase, name, selfReference);
+    if (kind === 'inner') {
+      const innerMarker = phrase.lastIndexOf('其实');
+      if (innerMarker >= 0) {
+        phrase = phrase.slice(innerMarker + 2).replace(/^[，,:：\s]+/, '');
+      }
+      if (!phrase.startsWith(selfReference)) phrase = `${selfReference}${phrase}`;
+      phrase = `其实，${phrase}`;
+    } else if (kind === 'identity' && !phrase.startsWith(selfReference)) {
+      phrase = `${selfReference}${/^(?:是|为)/.test(phrase) ? '' : '是'}${phrase}`;
+    } else if (kind === 'goal' && !phrase.startsWith(selfReference)) {
+      phrase = `${selfReference}${/^(?:想要|希望|渴望|决定|发誓|要)/.test(phrase) ? '' : '想要'}${phrase}`;
+    } else if (kind === 'likes' && !phrase.startsWith(selfReference)) {
+      phrase = `${selfReference}${/^(?:喜欢|爱好|偏爱|钟爱)/.test(phrase) ? '' : '喜欢'}${phrase}`;
+    } else if (kind === 'dislikes' && !phrase.startsWith(selfReference)) {
+      phrase = `${selfReference}${/^(?:讨厌|厌恶|害怕|恐惧|担心)/.test(phrase) ? '' : '讨厌'}${phrase}`;
+    } else if (kind === 'relationship' && !phrase.startsWith(selfReference)) {
+      phrase = `${selfReference}${/^(?:把|将|和|与)/.test(phrase) ? '' : '的'}${phrase}`;
+    } else if (kind === 'story' && !phrase.startsWith(selfReference)) {
       phrase = `${selfReference}${phrase}`;
     }
-    if (prefix && !phrase.startsWith(prefix)) phrase = `${prefix}${phrase}`;
-    if (phrase.length > MAX_PHRASE_LENGTH - 1) {
-      phrase = `${phrase.slice(0, MAX_PHRASE_LENGTH - 2).replace(/[，,、\s]+$/g, '')}…`;
-    }
-    return /[…。！？!?]$/.test(phrase) ? phrase : `${phrase}。`;
+    return completeBubbleText(phrase);
   }
 
   function quotedSpeech(sections) {
     const phrases = [];
     for (const fact of sections.speech) {
-      const quotes = [...fact.matchAll(/[“"'‘]([^”"'’]{2,50})[”"'’]/g)];
-      if (quotes.length > 0) phrases.push(...quotes.map((match) => match[1]));
-      else phrases.push(fact.replace(/^(?:口癖|常说|总会说|说话时会)\s*[是为]?\s*/, ''));
+      const quotes = extractQuotedText(fact);
+      if (quotes.length > 0) {
+        phrases.push(...quotes);
+        continue;
+      }
+      const spokenClause = fact.match(/(?:会说|常说|总会说|说的是)\s*[：:]\s*(.+)$/)?.[1];
+      if (spokenClause) {
+        phrases.push(spokenClause);
+        continue;
+      }
+      if (!SPEECH_DESCRIPTION.test(fact)) phrases.push(fact);
     }
     return phrases;
-  }
-
-  function representativeQuotes(profile) {
-    const result = [];
-    const pattern = /(?:口癖|常说|总会说|代表台词|说话方式)[^“"「『\n]{0,18}(?:“([^”]{2,60})”|"([^"]{2,60})"|「([^」]{2,60})」|『([^』]{2,60})』)/g;
-    for (const match of profile.matchAll(pattern)) {
-      result.push(match.slice(1).find(Boolean));
-    }
-    return result;
   }
 
   function chooseFont(profile) {
@@ -379,24 +607,22 @@
     const selfReference = extractSelfReference(normalized);
 
     const phrases = unique([
-      ...representativeQuotes(normalized)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
-      ...quotedSpeech(sections).slice(0, 4)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+      ...quotedSpeech(sections).slice(0, 8)
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'speech')),
       ...sections.inner.slice(0, 5)
-        .map((fact) => firstPersonFact(fact, name, selfReference, '其实，')),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'inner')),
       ...sections.goal.slice(0, 4)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'goal')),
       ...sections.story.slice(0, 5)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'story')),
       ...sections.relationship.slice(0, 4)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'relationship')),
       ...sections.likes.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'likes')),
       ...sections.dislikes.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'dislikes')),
       ...sections.identity.slice(0, 3)
-        .map((fact) => firstPersonFact(fact, name, selfReference)),
+        .map((fact) => firstPersonFact(fact, name, selfReference, 'identity')),
       ...matchedRules.flatMap((rule) => rule.phrases),
     ]).slice(0, 40);
 

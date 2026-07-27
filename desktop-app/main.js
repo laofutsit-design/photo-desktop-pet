@@ -7,7 +7,7 @@ const sharp = require('sharp');
 const { removeBackground } = require('./background-removal');
 
 function appIconPath() {
-  return path.join(__dirname, 'assets', process.platform === 'darwin' ? 'icon.png' : 'icon.ico');
+  return path.join(__dirname, 'assets', process.platform === 'darwin' ? 'icon-macos.png' : 'icon.ico');
 }
 
 const DEFAULT_SIZE = 220;
@@ -667,7 +667,7 @@ async function showPetMenu() {
     {
       label: processingPhoto ? '正在生成桌宠…' : (petReady ? '添加照片（可多选）' : '开始生成桌宠'),
       enabled: !processingPhoto,
-      click: () => petWindow.webContents.send('pet:choose-photos', { groupId: activeGroupId }),
+      click: () => petWindow.webContents.send('pet:choose-photos', { autoGroup: true }),
     },
     {
       label: '管理已添加照片…',
@@ -1409,7 +1409,7 @@ ipcMain.handle('manager:add-photos', (_event, groupId) => {
   if (processingPhoto) return false;
   hidePhotoManager();
   showPetWindow();
-  petWindow.webContents.send('pet:choose-photos', { groupId });
+  petWindow.webContents.send('pet:choose-photos', { groupId, forceGroup: true });
   return true;
 });
 
@@ -1722,6 +1722,7 @@ ipcMain.on('pet:end-drag', (_event, id) => {
 });
 
 app.whenReady().then(async () => {
+  if (process.platform === 'darwin') app.dock?.setIcon(appIconPath());
   await loadSettings();
   const saved = await loadSavedForms();
   activeGroupId = saved.activeGroupId;

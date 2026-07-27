@@ -1,10 +1,10 @@
 {
-  "tag_name": "v1.1.17",
+  "tag_name": "v1.1.19",
   "html_url": "https://laofutsit-design.github.io/photo-desktop-pet/",
-  "body": "角色设定现支持最多 20000 字，可在本地分析剧情、身世、内心、性格、目标、关系、喜好与口癖，生成符合人物设定的气泡、动作专属台词和自动字体；无需联网或额外安装 AI。",
+  "body": "改进角色设定气泡解析：识别中英文引号、问号、感叹号、省略号、冒号与列表标题，保留台词原有标点；过滤剧情旁白、说话风格说明、网址、身高生日等元数据和残缺片段，同时继续根据身份、内心、目标与喜恶生成自然的第一人称气泡。",
   "windows": {
-    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.17/photo-desktop-pet-1.1.17-Windows-x64.exe",
-    "sha256": "93EAB3A05E287F24CFD0522BC83862B1AA26AF432CAAE29BF59DC9FCAB6D4990",
-    "size": 285252337
+    "url": "https://github.com/laofutsit-design/photo-desktop-pet/releases/download/v1.1.19/photo-desktop-pet-1.1.19-Windows-x64.exe",
+    "sha256": "7FBC6FE58E72C0329797D9366F78D04B8E3202E851082A406BCDB6D7393A6764",
+    "size": 286020398
   }
 }

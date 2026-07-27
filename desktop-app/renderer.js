@@ -1,4 +1,5 @@
 const pet = document.querySelector('#pet');
+const petTransition = document.querySelector('#petTransition');
 const petPose = document.querySelector('#petPose');
 const petEffect = document.querySelector('#petEffect');
 const bubble = document.querySelector('#bubble');
@@ -47,6 +48,8 @@ const HIT_MASK_MAX_SIZE = 512;
 const HIT_ALPHA_THRESHOLD = 128;
 const MAX_CUSTOM_PHRASE_COUNT = 50;
 const MAX_CUSTOM_PHRASE_LENGTH = 100;
+const MAX_CHARACTER_GROUPS = 12;
+const POSE_TRANSITION_DURATION = 380;
 const personalityPhrases = {
   calm: [
     '嗯，我在。', '安静一点也很好。', '别急，慢慢来。', '今天还算顺利。', '我只是在观察。',
@@ -109,10 +112,14 @@ let hitTestAnimationFrame;
 let hitTestTrackingUntil = 0;
 let idleTimer;
 let pendingImportGroupId;
+let forceImportGroup = false;
 let activeEdge;
 let specialActionTimer;
+let poseTransitionTimer;
+let poseActionTimer;
 let activeHeadProfile = { left: .08, top: .02, right: .92, bottom: .66 };
 const characterBehaviorCache = new Map();
+const formDescriptorCache = new Map();
 
 function characterBehavior(groupId = activeGroupId) {
   const group = groups.find((item) => item.id === groupId);
@@ -295,7 +302,71 @@ function showBubble(message = randomPhrase()) {
   bubbleTimer = setTimeout(() => bubble.classList.remove('show'), visibleDuration);
 }
 
+function groupFormIndices(groupId = activeGroupId) {
+  return formMetadata
+    .map((form, index) => (form.groupId === groupId && petForms[index] ? index : -1))
+    .filter((index) => index >= 0);
+}
+
+function clearPoseTransition() {
+  clearTimeout(poseTransitionTimer);
+  poseTransitionTimer = undefined;
+  pet.classList.remove('pose-enter');
+  petTransition.classList.remove('pose-leave');
+  petTransition.hidden = true;
+  petTransition.removeAttribute('src');
+}
+
+function beginPoseTransition(previousSource) {
+  clearPoseTransition();
+  if (!previousSource) return;
+  pet.classList.remove(...allActions);
+  let snapshot = previousSource;
+  if (pet.naturalWidth > 0 && pet.naturalHeight > 0) {
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = pet.naturalWidth;
+      canvas.height = pet.naturalHeight;
+      canvas.getContext('2d').drawImage(pet, 0, 0);
+      snapshot = canvas.toDataURL('image/png');
+    } catch {
+      snapshot = previousSource;
+    }
+  }
+  petTransition.src = snapshot;
+  petTransition.hidden = false;
+  void petTransition.offsetWidth;
+  petTransition.classList.add('pose-leave');
+  pet.classList.add('pose-enter');
+  trackPetAnimationHitTest(POSE_TRANSITION_DURATION + 60);
+  poseTransitionTimer = setTimeout(clearPoseTransition, POSE_TRANSITION_DURATION + 30);
+}
+
+function afterPoseTransition(callback, transitioned) {
+  clearTimeout(poseActionTimer);
+  if (!transitioned) {
+    callback();
+    return;
+  }
+  poseActionTimer = setTimeout(() => {
+    poseActionTimer = undefined;
+    callback();
+  }, POSE_TRANSITION_DURATION);
+}
+
+function advanceDynamicPose() {
+  const groupForms = groupFormIndices();
+  if (groupForms.length < 2) return false;
+  const position = groupForms.indexOf(activeFormIndex);
+  const nextPosition = position < 0 ? 0 : (position + 1) % groupForms.length;
+  activatePetForm(groupForms[nextPosition], { transition: true });
+  return true;
+}
+
 function resetSpecialAction() {
+  clearPoseTransition();
+  clearTimeout(poseActionTimer);
+  poseActionTimer = undefined;
   clearTimeout(specialActionTimer);
   specialActionTimer = undefined;
   pet.classList.remove(...specialActions);
@@ -308,10 +379,14 @@ function interact() {
   const preferredActions = characterBehavior().clickActions;
   const animation = preferredActions[interactionIndex % preferredActions.length];
   interactionIndex = (interactionIndex + 1) % preferredActions.length;
-  pet.classList.remove(...allActions);
-  void pet.offsetWidth;
-  pet.classList.add(animation);
-  trackPetAnimationHitTest(1150);
+  const transitioned = advanceDynamicPose();
+  afterPoseTransition(() => {
+    if (uiState !== 'ready' || dragState) return;
+    pet.classList.remove(...allActions);
+    void pet.offsetWidth;
+    pet.classList.add(animation);
+    trackPetAnimationHitTest(1150);
+  }, transitioned);
   showBubble();
   scheduleIdleAction();
 }
@@ -326,26 +401,33 @@ function playSpecialAction(action) {
   }[action];
   if (!settings || uiState !== 'ready') return;
   resetSpecialAction();
-  pet.classList.remove(...allActions);
-  petEffect.className = 'pet-effect';
-  petEffect.textContent = '';
-  void pet.offsetWidth;
-  pet.classList.add(settings.className);
-  petEffect.classList.add(`effect-${action}`);
-  trackPetAnimationHitTest(settings.duration + 150);
+  const transitioned = advanceDynamicPose();
   const profilePhrases = characterBehavior().actionPhrases?.[action] || [];
   showBubble(
     profilePhrases.length > 0
       ? profilePhrases[Math.floor(Math.random() * profilePhrases.length)]
       : settings.phrase,
   );
-  specialActionTimer = setTimeout(() => {
-    pet.classList.remove(settings.className);
+  afterPoseTransition(() => {
+    if (uiState !== 'ready' || dragState) {
+      scheduleIdleAction();
+      return;
+    }
+    pet.classList.remove(...allActions);
     petEffect.className = 'pet-effect';
     petEffect.textContent = '';
-    specialActionTimer = undefined;
-    scheduleIdleAction();
-  }, settings.duration);
+    void pet.offsetWidth;
+    pet.classList.add(settings.className);
+    petEffect.classList.add(`effect-${action}`);
+    trackPetAnimationHitTest(settings.duration + 150);
+    specialActionTimer = setTimeout(() => {
+      pet.classList.remove(settings.className);
+      petEffect.className = 'pet-effect';
+      petEffect.textContent = '';
+      specialActionTimer = undefined;
+      scheduleIdleAction();
+    }, settings.duration);
+  }, transitioned);
 }
 
 function scheduleIdleAction() {
@@ -355,7 +437,12 @@ function scheduleIdleAction() {
 }
 
 function runIdleAction() {
-  if (uiState !== 'ready' || dragState || nativeMenuOpen || !bubbleEditor.hidden || specialActionTimer) {
+  if (uiState !== 'ready'
+    || dragState
+    || activeEdge
+    || nativeMenuOpen
+    || !bubbleEditor.hidden
+    || specialActionTimer) {
     scheduleIdleAction();
     return;
   }
@@ -366,37 +453,50 @@ function runIdleAction() {
     return;
   }
   const animation = behavior.idleActions[Math.floor(Math.random() * behavior.idleActions.length)];
-  pet.classList.remove(...allActions);
-  void pet.offsetWidth;
-  pet.classList.add(animation);
-  trackPetAnimationHitTest(2200);
+  const transitioned = groupFormIndices().length > 1 && Math.random() < .62
+    ? advanceDynamicPose()
+    : false;
+  afterPoseTransition(() => {
+    if (uiState !== 'ready' || dragState) return;
+    pet.classList.remove(...allActions);
+    void pet.offsetWidth;
+    pet.classList.add(animation);
+    trackPetAnimationHitTest(2200);
+  }, transitioned);
   if (Math.random() < .3) showBubble();
   scheduleIdleAction();
 }
 
-function activatePetForm(index) {
+function activatePetForm(index, options = {}) {
   if (!Number.isInteger(index) || !petForms[index]) return false;
+  const previousGroupId = activeGroupId;
+  const nextGroupId = formMetadata[index]?.groupId || activeGroupId;
+  const previousSource = pet.currentSrc || pet.src;
+  const shouldTransition = options.transition === true
+    && index !== activeFormIndex
+    && nextGroupId === previousGroupId
+    && Boolean(previousSource);
   activeFormIndex = index;
-  activeGroupId = formMetadata[index]?.groupId || activeGroupId;
+  activeGroupId = nextGroupId;
   applyBubbleAppearance();
   const animationStartedAt = performance.now();
+  if (shouldTransition) beginPoseTransition(previousSource);
+  else clearPoseTransition();
   pet.src = petForms[index];
-  preparePetHitMask(petForms[index], index, animationStartedAt);
+  preparePetHitMask(petForms[index], index, animationStartedAt, shouldTransition);
   updateAutoBubbleColor(petForms[index]);
   window.desktopPet.setActiveFormIndex(index, activeGroupId);
   return true;
 }
 
 function switchPetForm() {
-  const groupForms = formMetadata
-    .map((form, index) => (form.groupId === activeGroupId ? index : -1))
-    .filter((index) => index >= 0);
+  const groupForms = groupFormIndices();
   if (groupForms.length < 2) {
     showBubble('这个角色再添加一张照片，就能双击换形态啦！');
     return;
   }
   const position = groupForms.indexOf(activeFormIndex);
-  activatePetForm(groupForms[(position + 1) % groupForms.length]);
+  activatePetForm(groupForms[(position + 1) % groupForms.length], { transition: true });
   showBubble();
 }
 
@@ -421,6 +521,92 @@ function loadImage(dataUrl) {
     image.onerror = () => reject(new Error('生成的透明图片无法读取'));
     image.src = dataUrl;
   });
+}
+
+function formAppearanceDescriptor(dataUrl) {
+  if (formDescriptorCache.has(dataUrl)) return formDescriptorCache.get(dataUrl);
+  const analysis = loadImage(dataUrl).then((image) => {
+    const scale = Math.min(1, 72 / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    context.drawImage(image, 0, 0, width, height);
+    const rgba = context.getImageData(0, 0, width, height).data;
+    return window.PhotoCharacterAnalysis?.createCharacterDescriptor(rgba, width, height) || null;
+  }).catch((error) => {
+    console.warn('无法分析角色外观，将保守地建立新角色分组', error);
+    return null;
+  });
+  formDescriptorCache.set(dataUrl, analysis);
+  return analysis;
+}
+
+function createAutomaticGroup(nextGroups) {
+  if (nextGroups.length >= MAX_CHARACTER_GROUPS) {
+    throw new Error(`最多创建 ${MAX_CHARACTER_GROUPS} 个角色分组，请先在照片管理中整理已有角色。`);
+  }
+  let number = nextGroups.length + 1;
+  const names = new Set(nextGroups.map((group) => group.name));
+  while (names.has(`角色 ${number}`)) number += 1;
+  const uniquePart = globalThis.crypto?.randomUUID?.()
+    || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const group = { id: `auto-${uniquePart}`, name: `角色 ${number}`, profile: '' };
+  nextGroups.push(group);
+  return group;
+}
+
+async function analyzeImportedCharacterGroups(existingForms, newForms, requestedGroupId) {
+  const requested = groups.find((group) => group.id === requestedGroupId);
+  if (requested) {
+    return {
+      groups: groups.map((group) => ({ ...group })),
+      metadata: newForms.map(() => ({ groupId: requested.id, phrases: [] })),
+      recognizedGroupIds: [requested.id],
+      automatic: false,
+    };
+  }
+
+  const nextGroups = groups.map((group) => ({ ...group }));
+  const groupDescriptors = new Map();
+  const existingDescriptors = await Promise.all(existingForms.map(formAppearanceDescriptor));
+  existingDescriptors.forEach((descriptor, index) => {
+    const groupId = formMetadata[index]?.groupId;
+    if (!descriptor || !nextGroups.some((group) => group.id === groupId)) return;
+    if (!groupDescriptors.has(groupId)) groupDescriptors.set(groupId, []);
+    groupDescriptors.get(groupId).push(descriptor);
+  });
+
+  const occupiedGroups = new Set(formMetadata.map((form) => form.groupId));
+  const emptyGroups = nextGroups.filter((group) => !occupiedGroups.has(group.id));
+  const newDescriptors = await Promise.all(newForms.map(formAppearanceDescriptor));
+  const metadata = [];
+  const recognizedGroupIds = new Set();
+
+  for (const descriptor of newDescriptors) {
+    const match = descriptor
+      ? window.PhotoCharacterAnalysis?.matchingCharacterGroup(descriptor, groupDescriptors)
+      : null;
+    let group = match
+      ? nextGroups.find((candidate) => candidate.id === match.groupId)
+      : undefined;
+    if (!group) group = emptyGroups.shift() || createAutomaticGroup(nextGroups);
+    metadata.push({ groupId: group.id, phrases: [] });
+    recognizedGroupIds.add(group.id);
+    if (descriptor) {
+      if (!groupDescriptors.has(group.id)) groupDescriptors.set(group.id, []);
+      groupDescriptors.get(group.id).push(descriptor);
+    }
+  }
+
+  return {
+    groups: nextGroups,
+    metadata,
+    recognizedGroupIds: [...recognizedGroupIds],
+    automatic: true,
+  };
 }
 
 function buildPetHitMaskFromImage(image) {
@@ -661,11 +847,11 @@ function setDetectedHeadProfile(mask) {
   window.desktopPet.setHeadProfile?.(activeHeadProfile);
 }
 
-function preparePetHitMask(dataUrl, formIndex, animationStartedAt) {
+function preparePetHitMask(dataUrl, formIndex, animationStartedAt, preserveExisting = false) {
   const request = ++hitMaskRequest;
   clearTimeout(animatedHitMaskTimer);
   animatedHitMaskTimer = undefined;
-  activeHitMask = undefined;
+  if (!preserveExisting) activeHitMask = undefined;
   refreshMousePolicy();
 
   if (dataUrl.startsWith('data:image/gif;')) {
@@ -870,6 +1056,7 @@ async function preloadForms(forms) {
 }
 
 async function replacePetForms(state) {
+  formDescriptorCache.clear();
   const forms = Array.isArray(state?.forms) ? state.forms : [];
   if (forms.length === 0) {
     petForms = [];
@@ -975,14 +1162,18 @@ async function finishPhotoImport(results) {
   if (nextForms.length > 24) throw new Error('桌宠最多保留 24 个形态');
 
   await preloadForms(newForms);
-  const groupId = groups.some((group) => group.id === pendingImportGroupId)
-    ? pendingImportGroupId
-    : (groups.some((group) => group.id === activeGroupId) ? activeGroupId : groups[0].id);
+  loadingDetail.textContent = '正在本地比较角色外观并合并动作姿态…';
+  const grouping = await analyzeImportedCharacterGroups(
+    existingForms,
+    newForms,
+    forceImportGroup ? pendingImportGroupId : undefined,
+  );
+  groups = grouping.groups;
   const nextMetadata = [
     ...formMetadata,
-    ...newForms.map(() => ({ groupId, phrases: [] })),
+    ...grouping.metadata,
   ];
-  activeGroupId = groupId;
+  activeGroupId = grouping.metadata[0]?.groupId || activeGroupId;
   await window.desktopPet.saveForms({
     forms: nextForms,
     formMetadata: nextMetadata,
@@ -993,7 +1184,15 @@ async function finishPhotoImport(results) {
   formMetadata = nextMetadata;
   activatePetForm(existingForms.length);
   setUiState('ready');
-  showBubble(petForms.length > 1 ? `新形态已加入，现在有 ${petForms.length} 个！` : randomPhrase());
+  if (newForms.length > 1 && grouping.recognizedGroupIds.length === 1) {
+    showBubble(`已合并 ${newForms.length} 个动作姿态，我会自动切换啦！`);
+  } else if (grouping.automatic && grouping.recognizedGroupIds.length > 1) {
+    showBubble(`已识别 ${grouping.recognizedGroupIds.length} 个角色，并分别整理动作姿态。`);
+  } else if (groupFormIndices().length > 1) {
+    showBubble('新动作姿态已加入，我会在互动时自动切换！');
+  } else {
+    showBubble(randomPhrase());
+  }
 }
 
 async function importPhotos(action) {
@@ -1009,6 +1208,7 @@ async function importPhotos(action) {
     recoverUiAfter(3600);
   } finally {
     pendingImportGroupId = undefined;
+    forceImportGroup = false;
     importInFlight = false;
     window.desktopPet.setAddingPhoto(false);
     refreshMousePolicy();
@@ -1017,6 +1217,7 @@ async function importPhotos(action) {
 
 function choosePhotos(options) {
   pendingImportGroupId = options?.groupId;
+  forceImportGroup = options?.forceGroup === true;
   return importPhotos(() => window.desktopPet.choosePhotos());
 }
 

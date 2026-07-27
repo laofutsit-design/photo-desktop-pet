@@ -1,19 +1,22 @@
 name: Build macOS DMG
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       release_tag:
         description: Existing GitHub Release tag to receive the DMG
         required: true
-        default: v1.1.9
+        default: v1.1.19
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,9 +24,25 @@ jobs:
           node-version: 20
           cache: npm
           cache-dependency-path: desktop-app/package-lock.json
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          release_tag="${INPUT_RELEASE_TAG:-$REF_NAME}"
+          if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $release_tag"
+            exit 1
+          fi
+          echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
       - name: Install dependencies
         working-directory: desktop-app
         run: npm ci --include=optional
+      - name: Verify app source and icon configuration
+        working-directory: desktop-app
+        run: npm run verify
       - name: Verify sharp in Electron runtime
         working-directory: desktop-app
         env:
@@ -41,7 +60,9 @@ jobs:
         working-directory: desktop-app
         shell: bash
         run: |
-          app_executable="$(find "$PWD/dist" -path '*/Photo Desktop Pet.app/Contents/MacOS/Photo Desktop Pet' -type f -print -quit)"
+          shopt -s nullglob
+          app_executables=("$PWD"/dist/mac*/"Photo Desktop Pet.app"/Contents/MacOS/"Photo Desktop Pet")
+          app_executable="${app_executables[0]:-}"
           if [[ -z "$app_executable" ]]; then
             echo "Packaged app executable was not found."
             exit 1
@@ -54,7 +75,92 @@ jobs:
             echo "Packaged Electron must embed Node 20 or newer."
             exit 1
           fi
+      - name: Verify bundle icon, version, and DMG
+        working-directory: desktop-app
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          shopt -s nullglob
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$RELEASE_TAG" != "v$package_version" ]]; then
+            echo "Release tag $RELEASE_TAG does not match app version v$package_version."
+            exit 1
+          fi
+
+          app_bundles=("$PWD"/dist/mac*/"Photo Desktop Pet.app")
+          app_bundle="${app_bundles[0]:-}"
+          if [[ -z "$app_bundle" ]]; then
+            echo "Packaged app bundle was not found."
+            exit 1
+          fi
+
+          info_plist="$app_bundle/Contents/Info.plist"
+          bundle_version="$(plutil -extract CFBundleShortVersionString raw "$info_plist" 2>/dev/null || true)"
+          icon_file="$(plutil -extract CFBundleIconFile raw "$info_plist" 2>/dev/null || true)"
+          if [[ "$bundle_version" != "$package_version" ]]; then
+            echo "Bundle version $bundle_version does not match package version $package_version."
+            exit 1
+          fi
+          if [[ -z "$icon_file" ]]; then
+            echo "CFBundleIconFile is missing."
+            exit 1
+          fi
+
+          bundle_icon="$app_bundle/Contents/Resources/$icon_file"
+          if [[ ! -f "$bundle_icon" && "$icon_file" != *.icns ]]; then
+            bundle_icon="$bundle_icon.icns"
+          fi
+          if [[ ! -f "$bundle_icon" ]]; then
+            echo "Bundle icon $bundle_icon was not found."
+            exit 1
+          fi
+          if ! cmp -s "$bundle_icon" "$PWD/assets/icon.icns"; then
+            echo "Bundle icon differs from the configured application icon."
+            exit 1
+          fi
+          iconutil -c iconset "$bundle_icon" -o "$RUNNER_TEMP/photo-desktop-pet.iconset"
+          if [[ ! -f "$RUNNER_TEMP/photo-desktop-pet.iconset/icon_512x512@2x.png" ]]; then
+            echo "Bundle icon does not contain a 1024px representation."
+            exit 1
+          fi
+
+          dmg_files=("$PWD"/dist/*.dmg)
+          dmg_path="${dmg_files[0]:-}"
+          if [[ -z "$dmg_path" ]]; then
+            echo "DMG was not found."
+            exit 1
+          fi
+
+          mount_dir="$RUNNER_TEMP/photo-desktop-pet-dmg"
+          mkdir -p "$mount_dir"
+          cleanup() {
+            hdiutil detach "$mount_dir" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          hdiutil attach "$dmg_path" -readonly -nobrowse -mountpoint "$mount_dir" >/dev/null
+          if [[ ! -f "$mount_dir/.VolumeIcon.icns" ]]; then
+            echo "DMG volume icon was not found."
+            exit 1
+          fi
+          if ! cmp -s "$mount_dir/.VolumeIcon.icns" "$PWD/assets/icon.icns"; then
+            echo "DMG volume icon differs from the configured application icon."
+            exit 1
+          fi
+          cleanup
+          trap - EXIT
+
+          (
+            cd "$PWD/dist"
+            dmg_name="$(basename "$dmg_path")"
+            shasum -a 256 "$dmg_name" > "$dmg_name.sha256.txt"
+          )
       - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ inputs.release_tag }}" desktop-app/dist/*.dmg --clobber
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "$RELEASE_TAG" --notes "Photo Desktop Pet $RELEASE_TAG"
+          fi
+          gh release upload "$RELEASE_TAG" desktop-app/dist/*.dmg desktop-app/dist/*.dmg.sha256.txt --clobber

@@ -1,11 +1,11 @@
 {
   "name": "photo-desktop-pet",
-  "version": "1.1.17",
+  "version": "1.1.19",
   "private": true,
   "description": "Photo Desktop Pet for macOS",
   "main": "main.js",
   "scripts": {
-    "verify": "node ../../tools/verify-app.js .",
+    "verify": "node scripts/verify-app.js .",
     "verify:electron-runtime": "electron -e \"require('sharp'); console.log('sharp runtime ok:', process.versions.node)\"",
     "dist:mac": "electron-builder --mac dmg --x64 --publish never"
   },
@@ -34,6 +34,7 @@
     "artifactName": "photo-desktop-pet-${version}-mac-${arch}.${ext}",
     "mac": {
       "category": "public.app-category.entertainment",
+      "icon": "assets/icon.icns",
       "target": [
         {
           "target": "dmg",
@@ -43,6 +44,9 @@
         }
       ],
       "identity": null
+    },
+    "dmg": {
+      "icon": "assets/icon.icns"
     }
   }
 }
