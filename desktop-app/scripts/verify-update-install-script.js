@@ -56,7 +56,10 @@ for (const required of [
 
 const testDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'photo-desktop-pet-update-'));
 const scriptPath = path.join(testDirectory, 'install-update.ps1');
-fs.writeFileSync(scriptPath, script, 'utf16le');
+fs.writeFileSync(scriptPath, Buffer.concat([
+  Buffer.from([0xff, 0xfe]),
+  Buffer.from(script, 'utf16le'),
+]));
 const parseResult = spawnSync('powershell.exe', [
   '-NoProfile',
   '-NonInteractive',
