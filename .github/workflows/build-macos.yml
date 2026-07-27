@@ -9,7 +9,7 @@ on:
       release_tag:
         description: Existing GitHub Release tag to receive the DMG
         required: true
-        default: v1.2.1
+        default: v1.2.2
 
 permissions:
   contents: write
@@ -182,7 +182,7 @@ jobs:
         run: npm ci --include=optional
       - name: Verify app source
         working-directory: desktop-app
-        run: npm run verify
+        run: npm run verify && npm run verify:update
       - name: Verify sharp in Electron runtime
         working-directory: desktop-app
         env:

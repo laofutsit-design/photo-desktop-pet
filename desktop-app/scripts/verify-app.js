@@ -17,6 +17,16 @@ for (const fileName of [
   new vm.Script(source, { filename: fileName });
 }
 
+const mainSource = fs.readFileSync(path.join(sourcePath, 'main.js'), 'utf8');
+for (const [name, pattern] of [
+  ['temporary update download directory', /downloadDirectory:\s*path\.join\(tempDirectory,\s*'photo-desktop-pet-updates'\)/],
+  ['old-version uninstaller', /\$uninstallArguments\s*=\s*@\('\/S',\s*\('_\?='/],
+  ['wait for uninstall', /Start-Process[^\r\n]+\$uninstallArguments[^\r\n]+-Wait/],
+  ['wait for install', /Start-Process[^\r\n]+\$installerArguments[^\r\n]+-Wait/],
+]) {
+  if (!pattern.test(mainSource)) throw new Error(`Missing ${name} update behavior`);
+}
+
 function verifyDom(htmlName, rendererName) {
   const html = fs.readFileSync(path.join(sourcePath, htmlName), 'utf8');
   const renderer = fs.readFileSync(path.join(sourcePath, rendererName), 'utf8');
@@ -43,5 +53,6 @@ console.log(JSON.stringify({
   domReferences,
   assets: 'ok',
   macIcon: 'ok',
+  updateFlow: 'ok',
   version: manifest.version,
 }));

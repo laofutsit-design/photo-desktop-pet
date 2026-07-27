@@ -1,11 +1,12 @@
 {
   "name": "photo-desktop-pet",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "private": true,
   "description": "Photo Desktop Pet for macOS",
   "main": "main.js",
   "scripts": {
     "verify": "node scripts/verify-app.js .",
+    "verify:update": "node scripts/verify-update-install-script.js .",
     "verify:electron-runtime": "electron -e \"require('sharp'); console.log('sharp runtime ok:', process.versions.node)\"",
     "dist:mac": "electron-builder --mac dmg --x64 --publish never",
     "dist:win": "electron-builder --win nsis --x64 --publish never"

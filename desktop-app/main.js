@@ -442,17 +442,13 @@ function sendUpdateStatus(message, {
 function resolveUpdatePaths({
   executablePath = process.execPath,
   tempDirectory = app.getPath('temp'),
-  packaged = app.isPackaged,
-  platform = process.platform,
 } = {}) {
   const currentExecutable = path.resolve(executablePath);
   const installDirectory = path.dirname(currentExecutable);
   return {
     currentExecutable,
     installDirectory,
-    downloadDirectory: platform === 'win32' && packaged
-      ? installDirectory
-      : path.join(tempDirectory, 'photo-desktop-pet-updates'),
+    downloadDirectory: path.join(tempDirectory, 'photo-desktop-pet-updates'),
   };
 }
 
@@ -587,22 +583,25 @@ function buildUpdateInstallScript(installerPath, expectedVersion, options = {}) 
     '  $oldProcess.Refresh()',
     '}',
     'try {',
-    "  $label.Text = '正在替换原版本，请勿关闭…'",
-    '  [System.Windows.Forms.Application]::DoEvents()',
     `  $installDirectory = ${quotePowerShellLiteral(installDirectory)}`,
-    "  $installerArguments = @('/S', ('/D=' + $installDirectory))",
-    `  $installer = Start-Process -FilePath ${quotePowerShellLiteral(installerPath)} -ArgumentList $installerArguments -PassThru`,
-    '  while (-not $installer.HasExited) {',
+    `  $currentExecutable = ${quotePowerShellLiteral(currentExecutable)}`,
+    "  $uninstaller = Get-ChildItem -LiteralPath $installDirectory -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(Uninstall.*|unins\\d*)\\.exe$' } | Select-Object -First 1",
+    '  if ($uninstaller) {',
+    "    $label.Text = '正在删除旧版本，请勿关闭…'",
     '    [System.Windows.Forms.Application]::DoEvents()',
-    '    Start-Sleep -Milliseconds 100',
-    '    $installer.Refresh()',
+    "    $uninstallArguments = @('/S', ('_?=' + $installDirectory))",
+    '    $uninstallProcess = Start-Process -FilePath $uninstaller.FullName -ArgumentList $uninstallArguments -PassThru -Wait',
+    '    if ($uninstallProcess.ExitCode -ne 0) { throw "旧版本卸载程序退出代码：$($uninstallProcess.ExitCode)" }',
     '  }',
+    "  $label.Text = '正在安装新版本，请勿关闭…'",
+    '  [System.Windows.Forms.Application]::DoEvents()',
+    "  $installerArguments = @('/S', ('/D=' + $installDirectory))",
+    `  $installer = Start-Process -FilePath ${quotePowerShellLiteral(installerPath)} -ArgumentList $installerArguments -PassThru -Wait`,
     '  if ($installer.ExitCode -ne 0) { throw "安装程序退出代码：$($installer.ExitCode)" }',
     "  $label.Text = '正在验证新版本…'",
     '$progress.Style = "Blocks"',
     '$progress.Value = 92',
     '[System.Windows.Forms.Application]::DoEvents()',
-    `  $currentExecutable = ${quotePowerShellLiteral(currentExecutable)}`,
     '  if (-not (Test-Path -LiteralPath $currentExecutable -PathType Leaf)) { throw "更新后的程序文件不存在" }',
     '  $installedVersion = [version](Get-Item -LiteralPath $currentExecutable).VersionInfo.ProductVersion',
     `  if ($installedVersion.ToString(3) -ne ${quotePowerShellLiteral(String(expectedVersion).replace(/^v/i, ''))}) {`,
