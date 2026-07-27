@@ -9,7 +9,7 @@ on:
       release_tag:
         description: Existing GitHub Release tag to receive the DMG
         required: true
-        default: v1.1.19
+        default: v1.1.20
 
 permissions:
   contents: write

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, shell, Tray } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, net, screen, Tray } = require('electron');
 const { spawn } = require('node:child_process');
 const crypto = require('node:crypto');
 const fs = require('node:fs/promises');
@@ -425,15 +425,41 @@ async function fetchExpectedUpdateHash(update) {
   }
 }
 
-function sendUpdateStatus(message) {
+function sendUpdateStatus(message, {
+  stage = 'download',
+  percent,
+  indeterminate = false,
+} = {}) {
   if (!petWindow || petWindow.isDestroyed()) return;
-  petWindow.webContents?.send?.('pet:update-status', { message });
+  petWindow.webContents?.send?.('pet:update-status', {
+    message,
+    stage,
+    percent: Number.isFinite(percent) ? Math.max(0, Math.min(100, Math.round(percent))) : undefined,
+    indeterminate,
+  });
+}
+
+function resolveUpdatePaths({
+  executablePath = process.execPath,
+  tempDirectory = app.getPath('temp'),
+  packaged = app.isPackaged,
+  platform = process.platform,
+} = {}) {
+  const currentExecutable = path.resolve(executablePath);
+  const installDirectory = path.dirname(currentExecutable);
+  return {
+    currentExecutable,
+    installDirectory,
+    downloadDirectory: platform === 'win32' && packaged
+      ? installDirectory
+      : path.join(tempDirectory, 'photo-desktop-pet-updates'),
+  };
 }
 
 async function downloadUpdateInstaller(update, expectedHash) {
   const abortController = new AbortController();
   const timeoutId = setTimeout(() => abortController.abort(), UPDATE_DOWNLOAD_TIMEOUT_MS);
-  const updateDirectory = path.join(app.getPath('temp'), 'photo-desktop-pet-updates');
+  const updateDirectory = resolveUpdatePaths().downloadDirectory;
   const installerPath = path.join(
     updateDirectory,
     `photo-desktop-pet-${update.version}-Windows-x64.exe`,
@@ -458,12 +484,18 @@ async function downloadUpdateInstaller(update, expectedHash) {
       Number.isSafeInteger(responseBytes) && responseBytes > 0 ? responseBytes : undefined
     );
     if (totalBytes && totalBytes > UPDATE_MAX_BYTES) throw new Error('更新包大小异常');
+    if (!totalBytes) {
+      sendUpdateStatus('正在下载更新…', {
+        stage: 'download',
+        indeterminate: true,
+      });
+    }
 
     file = await fs.open(temporaryPath, 'w');
     const hash = crypto.createHash('sha256');
     const reader = response.body.getReader();
     let received = 0;
-    let lastProgress = -10;
+    let lastProgress = -1;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -474,9 +506,12 @@ async function downloadUpdateInstaller(update, expectedHash) {
       hash.update(chunk);
       if (totalBytes) {
         const progress = Math.min(100, Math.floor((received / totalBytes) * 100));
-        if (progress >= lastProgress + 10) {
+        if (progress !== lastProgress) {
           lastProgress = progress;
-          sendUpdateStatus(`正在下载更新 ${progress}%`);
+          sendUpdateStatus(`正在下载更新 ${progress}%`, {
+            stage: 'download',
+            percent: progress,
+          });
         }
       }
     }
@@ -490,6 +525,10 @@ async function downloadUpdateInstaller(update, expectedHash) {
     if (hash.digest('hex') !== expectedHash) throw new Error('更新包 SHA-256 校验失败');
     await fs.unlink(installerPath).catch(() => {});
     await fs.rename(temporaryPath, installerPath);
+    sendUpdateStatus('更新包下载完成 100%', {
+      stage: 'download',
+      percent: 100,
+    });
     return installerPath;
   } catch (error) {
     await file?.close().catch(() => {});
@@ -505,30 +544,100 @@ function quotePowerShellLiteral(value) {
   return `'${String(value).replaceAll("'", "''")}'`;
 }
 
-function installUpdateAfterQuit(installerPath) {
-  if (process.platform !== 'win32') throw new Error('当前系统暂不支持自动安装');
-  const currentExecutable = process.execPath;
-  const defaultExecutable = path.join(
-    process.env.LOCALAPPDATA || path.dirname(currentExecutable),
-    'Programs',
-    '照片桌宠',
-    '照片桌宠.exe',
-  );
+function buildUpdateInstallScript(installerPath, expectedVersion, options = {}) {
+  if (!parseReleaseVersion(expectedVersion)) throw new Error('更新版本号无效');
+  const {
+    currentExecutable,
+    installDirectory,
+  } = resolveUpdatePaths(options);
+  const errorDirectory = path.join(app.getPath('temp'), 'photo-desktop-pet-updates');
+  const errorPath = path.join(errorDirectory, 'last-update-error.txt');
   const script = [
+    "$ErrorActionPreference = 'Stop'",
+    'Add-Type -AssemblyName System.Windows.Forms',
+    'Add-Type -AssemblyName System.Drawing',
+    '[System.Windows.Forms.Application]::EnableVisualStyles()',
+    '$form = New-Object System.Windows.Forms.Form',
+    "$form.Text = '照片桌宠更新'",
+    '$form.StartPosition = "CenterScreen"',
+    '$form.Size = New-Object System.Drawing.Size(420, 150)',
+    '$form.FormBorderStyle = "FixedDialog"',
+    '$form.MaximizeBox = $false',
+    '$form.MinimizeBox = $false',
+    '$form.TopMost = $true',
+    '$form.UseWaitCursor = $true',
+    '$label = New-Object System.Windows.Forms.Label',
+    '$label.AutoSize = $false',
+    '$label.Location = New-Object System.Drawing.Point(24, 20)',
+    '$label.Size = New-Object System.Drawing.Size(360, 28)',
+    "$label.Text = '正在等待旧版本退出…'",
+    '$progress = New-Object System.Windows.Forms.ProgressBar',
+    '$progress.Location = New-Object System.Drawing.Point(24, 62)',
+    '$progress.Size = New-Object System.Drawing.Size(360, 20)',
+    '$progress.Style = "Marquee"',
+    '$progress.MarqueeAnimationSpeed = 28',
+    '$form.Controls.Add($label)',
+    '$form.Controls.Add($progress)',
+    '$form.Show()',
+    '[System.Windows.Forms.Application]::DoEvents()',
     `$oldProcess = Get-Process -Id ${process.pid} -ErrorAction SilentlyContinue`,
-    'if ($oldProcess) { Wait-Process -Id $oldProcess.Id -ErrorAction SilentlyContinue }',
-    `$installer = Start-Process -FilePath ${quotePowerShellLiteral(installerPath)} -ArgumentList '/S' -PassThru -Wait`,
-    'if ($installer.ExitCode -eq 0) {',
-    `  $currentExecutable = ${quotePowerShellLiteral(currentExecutable)}`,
-    `  $defaultExecutable = ${quotePowerShellLiteral(defaultExecutable)}`,
-    '  if (Test-Path -LiteralPath $currentExecutable) {',
-    '    Start-Process -FilePath $currentExecutable',
-    '  } elseif (Test-Path -LiteralPath $defaultExecutable) {',
-    '    Start-Process -FilePath $defaultExecutable',
-    '  }',
+    'while ($oldProcess -and -not $oldProcess.HasExited) {',
+    '  [System.Windows.Forms.Application]::DoEvents()',
+    '  Start-Sleep -Milliseconds 100',
+    '  $oldProcess.Refresh()',
     '}',
-    `Remove-Item -LiteralPath ${quotePowerShellLiteral(installerPath)} -Force -ErrorAction SilentlyContinue`,
+    'try {',
+    "  $label.Text = '正在替换原版本，请勿关闭…'",
+    '  [System.Windows.Forms.Application]::DoEvents()',
+    `  $installDirectory = ${quotePowerShellLiteral(installDirectory)}`,
+    "  $installerArguments = @('/S', ('/D=' + $installDirectory))",
+    `  $installer = Start-Process -FilePath ${quotePowerShellLiteral(installerPath)} -ArgumentList $installerArguments -PassThru`,
+    '  while (-not $installer.HasExited) {',
+    '    [System.Windows.Forms.Application]::DoEvents()',
+    '    Start-Sleep -Milliseconds 100',
+    '    $installer.Refresh()',
+    '  }',
+    '  if ($installer.ExitCode -ne 0) { throw "安装程序退出代码：$($installer.ExitCode)" }',
+    "  $label.Text = '正在验证新版本…'",
+    '$progress.Style = "Blocks"',
+    '$progress.Value = 92',
+    '[System.Windows.Forms.Application]::DoEvents()',
+    `  $currentExecutable = ${quotePowerShellLiteral(currentExecutable)}`,
+    '  if (-not (Test-Path -LiteralPath $currentExecutable -PathType Leaf)) { throw "更新后的程序文件不存在" }',
+    '  $installedVersion = [version](Get-Item -LiteralPath $currentExecutable).VersionInfo.ProductVersion',
+    `  if ($installedVersion.ToString(3) -ne ${quotePowerShellLiteral(String(expectedVersion).replace(/^v/i, ''))}) {`,
+    '    throw "安装后的版本不正确：$($installedVersion.ToString(3))"',
+    '  }',
+    `  Remove-Item -LiteralPath ${quotePowerShellLiteral(errorPath)} -Force -ErrorAction SilentlyContinue`,
+    '$progress.Value = 100',
+    "$label.Text = '更新完成，正在启动新版本…'",
+    '[System.Windows.Forms.Application]::DoEvents()',
+    'Start-Sleep -Milliseconds 500',
+    '  Start-Process -FilePath $currentExecutable',
+    '} catch {',
+    '$progress.Style = "Blocks"',
+    '$progress.Value = 0',
+    "$label.Text = '更新失败，请重新打开软件后重试。'",
+    '[System.Windows.Forms.Application]::DoEvents()',
+    `  New-Item -ItemType Directory -Path ${quotePowerShellLiteral(errorDirectory)} -Force | Out-Null`,
+    `  $_ | Out-String | Set-Content -LiteralPath ${quotePowerShellLiteral(errorPath)} -Encoding UTF8`,
+    '  Start-Sleep -Milliseconds 1800',
+    '} finally {',
+    `  Remove-Item -LiteralPath ${quotePowerShellLiteral(installerPath)} -Force -ErrorAction SilentlyContinue`,
+    '  $form.Close()',
+    '}',
   ].join('\r\n');
+  return {
+    currentExecutable,
+    installDirectory,
+    errorPath,
+    script,
+  };
+}
+
+function installUpdateAfterQuit(installerPath, expectedVersion) {
+  if (process.platform !== 'win32') throw new Error('当前系统暂不支持自动安装');
+  const { script } = buildUpdateInstallScript(installerPath, expectedVersion);
   const encodedScript = Buffer.from(script, 'utf16le').toString('base64');
   const helper = spawn('powershell.exe', [
     '-NoProfile',
@@ -571,35 +680,39 @@ async function checkForUpdates({ force = false } = {}) {
       return;
     }
 
-    const canAutoInstall = process.platform === 'win32';
-    const actionDetail = canAutoInstall
-      ? '确认后将自动下载、安装并重新打开；照片和设置会保留。'
-      : '确认后将打开官网下载页面，请选择适合当前 Mac 的安装包。';
     const result = await dialog.showMessageBox(petWindow, {
       type: 'info',
-      buttons: [canAutoInstall ? '下载并自动安装' : '打开下载页面', '以后再说'],
+      buttons: ['下载并自动安装', '以后再说'],
       defaultId: 0,
       cancelId: 1,
       title: '照片桌宠有新版本',
       message: `发现新版本 v${latestVersion}`,
       detail: typeof release.body === 'string' && release.body.trim()
-        ? `${release.body.trim().slice(0, 420)}\n\n${actionDetail}`
-        : actionDetail,
+        ? `${release.body.trim().slice(0, 420)}\n\n确认后将自动下载、安装并重新打开；照片和设置会保留。`
+        : '确认后将自动下载、安装并重新打开；照片和设置会保留。',
     });
     if (result.response !== 0) return;
-    if (!canAutoInstall) {
-      await shell.openExternal(release.html_url || UPDATE_WEBSITE_URL);
-      return;
-    }
 
     updateRequested = true;
-    sendUpdateStatus('正在准备更新…');
+    sendUpdateStatus('正在准备更新…', {
+      stage: 'download',
+      percent: 0,
+    });
     const update = resolveWindowsUpdate(release, latestVersion);
     const expectedHash = await fetchExpectedUpdateHash(update);
     const installerPath = await downloadUpdateInstaller(update, expectedHash);
-    sendUpdateStatus('下载完成，正在安装更新…');
-    installUpdateAfterQuit(installerPath);
+    sendUpdateStatus('下载完成，正在安装并替换原版本…', {
+      stage: 'install',
+      percent: 100,
+      indeterminate: true,
+    });
+    installUpdateAfterQuit(installerPath, update.version);
   } catch (error) {
+    if (updateRequested) {
+      sendUpdateStatus('自动更新失败，请稍后重试。', {
+        stage: 'error',
+      });
+    }
     if (force || updateRequested) {
       await dialog.showMessageBox(petWindow, {
         type: 'warning',

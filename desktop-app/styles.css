@@ -486,6 +486,41 @@ body {
   font-size: 12px;
 }
 
+.update-progress {
+  width: min(190px, 72vw);
+  height: 9px;
+  margin-top: 7px;
+  overflow: hidden;
+  border: 1px solid rgba(137, 83, 59, 0.18);
+  border-radius: 999px;
+  background: rgba(119, 76, 55, 0.12);
+  box-shadow: inset 0 1px 2px rgba(73, 44, 31, 0.10);
+}
+
+.update-progress-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #ff9f72, #ff755f 54%, #ffd09e);
+  box-shadow: 0 0 12px rgba(255, 117, 95, 0.38);
+  transition: width 160ms ease-out;
+}
+
+.update-progress.is-indeterminate .update-progress-bar {
+  width: 42% !important;
+  animation: update-progress-sweep 1.05s ease-in-out infinite;
+}
+
+@keyframes update-progress-sweep {
+  from {
+    transform: translateX(-115%);
+  }
+  to {
+    transform: translateX(245%);
+  }
+}
+
 .loading {
   display: flex;
   flex-direction: column;

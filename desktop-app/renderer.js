@@ -6,6 +6,8 @@ const bubble = document.querySelector('#bubble');
 const importButton = document.querySelector('#importButton');
 const loading = document.querySelector('#loading');
 const loadingDetail = document.querySelector('#loadingDetail');
+const updateProgress = document.querySelector('#updateProgress');
+const updateProgressBar = document.querySelector('#updateProgressBar');
 const errorBox = document.querySelector('#error');
 const dropHint = document.querySelector('#dropHint');
 const bubbleEditor = document.querySelector('#bubbleEditor');
@@ -1507,7 +1509,22 @@ window.desktopPet.onSizeChanged(setPetSize);
 window.desktopPet.onEdgeAction?.(setPetEdge);
 window.desktopPet.onSpecialAction?.(playSpecialAction);
 window.desktopPet.onUpdateStatus?.((state) => {
-  if (typeof state?.message === 'string' && state.message) showBubble(state.message);
+  if (typeof state?.message !== 'string' || !state.message) return;
+  if (state.stage === 'error') {
+    updateProgress.hidden = true;
+    updateProgress.classList.remove('is-indeterminate');
+    setUiState(petForms.length > 0 ? 'ready' : 'empty');
+    showBubble(state.message);
+    return;
+  }
+  setUiState('loading', state.message);
+  updateProgress.hidden = false;
+  updateProgress.classList.toggle('is-indeterminate', state.indeterminate === true);
+  const percent = Number.isFinite(state.percent)
+    ? Math.max(0, Math.min(100, Math.round(state.percent)))
+    : 0;
+  updateProgressBar.style.width = `${percent}%`;
+  updateProgress.setAttribute('aria-valuenow', String(percent));
 });
 window.desktopPet.onModelProgress(({
   photoIndex,
